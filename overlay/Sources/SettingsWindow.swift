@@ -36,10 +36,11 @@ final class SettingsWindow {
         var accessibilityGranted: () -> Void        // start the ⌥ hold keys
         var setWatchCrashes: (Bool) -> Void
         var setGhostCursor: (Bool) -> Void
-        // Autopilot
-        var toggleAutopilot: () -> Void             // turning on asks for consent first
-        var autopilotCheckNow: () -> Void
-        var setAutopilotApp: (String, Bool) -> Void
+        // Meeting Notes
+        var toggleMeeting: () -> Void               // asks first, once per launch
+        var openMeetings: () -> Void
+        var openMeeting: (String) -> Void           // a past meeting's folder
+        var showMeetingPanel: () -> Void
         // Integrations
         var toolsConnected: (Assistant) -> Bool     // slow: called off the main thread
         var connectTools: (Assistant, @escaping (String?) -> Void) -> Void
@@ -122,6 +123,7 @@ struct SettingsSnapshot: Equatable {
     var startAtLogin = false
     var autoUpdate = true
     var screenshotEvery = false
+    var hideFromCapture = false
     var version = ""
     var updateAvailable: String?        // a newer version, once found
     var updateStatus: String?           // "Downloading update…" while installing
@@ -162,17 +164,20 @@ struct SettingsSnapshot: Equatable {
     var watchCrashes = true
     var ghostCursor = true
     var quickCommands = true
-    // Autopilot
-    var autopilot = false
-    var autopilotCalls = 0
-    var autopilotApps: [String] = []
-    var autopilotChoices: [Item] = []
+    // Meeting Notes
+    var meetingNotes = false
+    var meetingSummarizeGuest = true
+    var meetingSummarizeYou = false
+    var meetingReplies = true
+    var meetingCodeLookup = true
+    var meetingRecord = true
+    var pastMeetings: [Item] = []      // the latest 10, id = folder path
     // Advanced
     var crashLogExists = false
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, assistant, voice, control, autopilot, integrations, advanced
+    case general, assistant, voice, control, meetings, integrations, advanced
     var id: String { rawValue }
 
     var title: String {
@@ -181,7 +186,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .assistant: return "Assistant"
         case .voice: return "Voice"
         case .control: return "Computer Control"
-        case .autopilot: return "Autopilot"
+        case .meetings: return "Meeting Notes"
         case .integrations: return "Integrations"
         case .advanced: return "Advanced"
         }
@@ -193,7 +198,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .assistant: return "Which AI answers your voice questions, where answers appear, and how hard it thinks."
         case .voice: return "How your voice becomes text, and how answers are read back to you."
         case .control: return "Let the assistant click and type for you, with your approval."
-        case .autopilot: return "Suggestions while you work, only in the apps you choose."
+        case .meetings: return "Notes, summaries and suggested replies in your meetings, with a recording to play back."
         case .integrations: return "Connect VisionCLI's tools (look, click, browser…) to your AI command-line tools."
         case .advanced: return "Permissions, logs and files."
         }
@@ -205,7 +210,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .assistant: return "sparkles"
         case .voice: return "waveform"
         case .control: return "cursorarrow.click.2"
-        case .autopilot: return "wand.and.stars"
+        case .meetings: return "person.2.wave.2"
         case .integrations: return "puzzlepiece.extension"
         case .advanced: return "wrench.and.screwdriver"
         }
@@ -218,7 +223,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .assistant: return .purple
         case .voice: return .pink
         case .control: return .blue
-        case .autopilot: return .orange
+        case .meetings: return .orange
         case .integrations: return .green
         case .advanced: return Color(white: 0.45)
         }
@@ -270,7 +275,7 @@ final class SettingsModel: ObservableObject {
         }
     }
 
-    /// Runs an app action, then re-reads: the action may not have happened (e.g. the Autopilot consent was cancelled).
+    /// Runs an app action, then re-reads: the action may not have happened (e.g. the Meeting Notes consent was cancelled).
     func run(_ action: () -> Void) {
         action()
         refresh()
@@ -383,7 +388,7 @@ struct SettingsView: View {
         case .assistant: AssistantPage(m: m)
         case .voice: VoicePage(m: m)
         case .control: ControlPage(m: m)
-        case .autopilot: AutopilotPage(m: m)
+        case .meetings: MeetingsPage(m: m)
         case .integrations: IntegrationsPage(m: m)
         case .advanced: AdvancedPage(m: m)
         }
@@ -669,28 +674,50 @@ private struct ControlPage: View {
     ]
 }
 
-private struct AutopilotPage: View {
+private struct MeetingsPage: View {
     @ObservedObject var m: SettingsModel
 
     var body: some View {
         let s = m.s
         Card {
-            SwitchRow("Autopilot", "While you work in the apps below, VisionCLI reads the front window and suggests what to do next, using Claude Haiku. Nothing is sent for you.",
-                      isOn: Binding(get: { s.autopilot }, set: { on in if on != s.autopilot { m.run(m.hooks.toggleAutopilot) } }))
-            Divider()
-            Row("Checks this hour", "\(s.autopilotCalls) of at most \(Autopilot.hourlyCap), about 1k tokens each.") {
-                Button("Check Now") { m.run(m.hooks.autopilotCheckNow) }.disabled(!s.autopilot)
+            SwitchRow("Meeting Notes", "Listens to your Mac's sound (your colleagues) and your microphone (you), transcribes both on this Mac and shows the conversation in a panel. Start it anywhere with ⇧⌥⌘R. Off each time VisionCLI starts.",
+                      isOn: Binding(get: { s.meetingNotes }, set: { on in if on != s.meetingNotes { m.run(m.hooks.toggleMeeting) } }))
+            if s.meetingNotes {
+                Divider()
+                Row("Listening now", "The panel shows the conversation, summaries and replies.") { Button("Show Panel") { m.hooks.showMeetingPanel() } }
             }
         }
-        Card("Apps it may read", footer: "Every other app is never read. Password fields, password managers and System Settings are always skipped.") {
-            if s.autopilotChoices.isEmpty {
-                Text("Open the apps you want help with, and they appear here.").font(.system(size: 12)).foregroundStyle(.secondary).padding(.vertical, 8)
+        Card("Past meetings", footer: "Each meeting is saved with its notes, the summary and the recording, in VisionCLI's meetings folder.") {
+            if s.pastMeetings.isEmpty {
+                Text("None yet.").font(.system(size: 12)).foregroundStyle(.secondary).padding(.vertical, 8)
             }
-            ForEach(Array(s.autopilotChoices.enumerated()), id: \.1.id) { i, app in
+            ForEach(Array(s.pastMeetings.enumerated()), id: \.1.id) { i, meeting in
                 if i > 0 { Divider() }
-                Toggle(app.name, isOn: Binding(get: { s.autopilotApps.contains(app.id) }, set: { on in m.run { m.hooks.setAutopilotApp(app.id, on) } }))
-                    .toggleStyle(.checkbox).padding(.vertical, 6)
+                Row(meeting.name, nil) { Button("Open") { m.hooks.openMeeting(meeting.id) }.disabled(s.meetingNotes) }
             }
+            Divider()
+            Row("All meetings", nil) { Button("Show in Finder") { m.hooks.openMeetings() } }
+        }
+        Card("During a meeting", footer: "Summaries, replies and code answers use Claude under your own account: the transcript text is sent, never the audio.") {
+            SwitchRow("Summarize what colleagues say", "A one-line summary under each of their turns (Claude Haiku).",
+                      isOn: m.bind(\.meetingSummarizeGuest) { Settings.meetingSummarizeGuest = $0 })
+            Divider()
+            SwitchRow("Summarize what you say", "A summary under your own turns too. Your words are always in the notes and the meeting summary.",
+                      isOn: m.bind(\.meetingSummarizeYou) { Settings.meetingSummarizeYou = $0 })
+            Divider()
+            SwitchRow("Suggest replies", "When a colleague asks you something, three short replies appear once they've finished talking. Click to copy; nothing is sent.",
+                      isOn: m.bind(\.meetingReplies) { Settings.meetingReplies = $0 })
+            Divider()
+            SwitchRow("Answer code questions from the project", "Questions like \"which endpoint handles refunds?\" are looked up in the project's code (read-only) and answered with file:line.",
+                      isOn: m.bind(\.meetingCodeLookup) { Settings.meetingCodeLookup = $0 })
+            Divider()
+            SwitchRow("Record the meeting", "Keeps a recording of both sides on this Mac, to play back with the transcript.",
+                      isOn: m.bind(\.meetingRecord) { Settings.meetingRecord = $0 })
+        }
+        Card("Privacy") {
+            SwitchRow("Hide VisionCLI from screen sharing and recordings",
+                      "The Meeting Notes panel, bubble, badge, Visi and VisionCLI's windows are left out when you share or record your screen. Some capture apps may still show them.",
+                      isOn: m.bind(\.hideFromCapture) { Settings.hideFromCapture = $0 })
         }
     }
 }

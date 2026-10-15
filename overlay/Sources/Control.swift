@@ -278,7 +278,8 @@ final class UIElements {
         } else {
             app = Computer.frontApp
         }
-        guard let app else { return ("", []) }
+        // Reading our own SwiftUI windows through Accessibility from this (background) queue deadlocks SwiftUI.
+        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return ("", []) }
         self.app = app
         appName = app.localizedName ?? ""
         let root = AXUIElementCreateApplication(app.processIdentifier)
@@ -383,7 +384,6 @@ enum ControlAction: String, CaseIterable {
     case status
     case displays
     case announce
-    case autopilotCheck = "autopilot_check"
     case capture
     case elements
     case click
@@ -508,13 +508,6 @@ extension AppDelegate {
                     }
                 }
                 reply(out)
-            }
-            return
-        case .autopilotCheck:
-            DispatchQueue.main.async {
-                guard Settings.autopilot else { reply(["error": "Autopilot is off"]); return }
-                self.autopilot.checkNow()
-                reply(["ok": true])
             }
             return
         case .capture:
@@ -718,7 +711,7 @@ extension AppDelegate {
         case .openURL:
             guard let url = r["url"] as? String else { return "Missing url." }
             return Computer.openURL(url)
-        case .status, .displays, .announce, .autopilotCheck, .capture, .elements:
+        case .status, .displays, .announce, .capture, .elements:
             return "Unknown action \(action)." // answered in handleControl; never performed
         }
         return nil

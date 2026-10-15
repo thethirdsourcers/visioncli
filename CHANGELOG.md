@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Meeting Notes (macOS; Linux and Windows to follow):** a note-taker for work meetings. Press **⇧⌥⌘R** (or Settings → Meeting Notes) to start.
+  - Your colleagues (your Mac's sound) and you (the microphone) are transcribed on your Mac and shown as a chat in a side panel.
+  - Each colleague's turn gets a one-line summary.
+  - When you're asked something, three short replies appear once they've finished talking. Click one to copy it, or type it where you're typing; nothing is sent.
+  - Questions about the code are answered from the project (read-only), with file:line.
+  - Each meeting is saved with its notes, a summary at the end (overview, key points, questions, action items) and a recording to play back alongside the transcript.
+  - Every part can be switched off in Settings.
+- **Hide VisionCLI from screen sharing** (Settings → Meeting Notes): VisionCLI's windows stay visible to you but are left out of screen shares and recordings.
+- **Autopilot is removed** on macOS: Meeting Notes takes its place in Settings.
+
 ## 0.10.5
 
 - **New look:** a new logo (an aperture around a pupil) on every app icon, the macOS menu bar and the Linux/Windows tray, and a new website at **https://visioncli.thethirdsourcers.com** with downloads for every platform.

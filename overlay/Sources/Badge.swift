@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// A small floating pill at the top of the screen the pointer is on, so it's always obvious when VisionCLI is looking at
-/// the screen (a screenshot, Autopilot reading a window) or using the computer. While it's using the computer the edges
+/// the screen (a screenshot) or using the computer. While it's using the computer the edges
 /// of that screen also glow. Click-through, and never in screenshots (FastCapture excludes our own windows).
 final class ActivityBadge {
     static let shared = ActivityBadge()

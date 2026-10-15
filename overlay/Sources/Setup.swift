@@ -452,7 +452,7 @@ private struct SetupView: View {
             permission(granted: m.accessibility, button: "Open Accessibility Settings", action: m.askAccessibility)
             note("In System Settings, turn on VisionCLI in the list. This window updates on its own.")
         case .screen:
-            header("Screen Recording", "Lets VisionCLI see the window you're asking about. It only looks when you ask, or when Autopilot is on.")
+            header("Screen Recording", "Lets VisionCLI see the window you're asking about. It only looks when you ask. Meeting Notes also uses it to hear your Mac's sound.")
             permission(granted: m.screen, button: "Allow Screen Recording", action: m.askScreen)
             if !m.screen && m.screenAsked {
                 note("After turning it on, macOS needs VisionCLI to restart. Setup continues where you left off.")

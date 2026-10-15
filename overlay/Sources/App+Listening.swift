@@ -16,6 +16,7 @@ extension AppDelegate {
             startListening(point: key == .point, screen: key == .screen)
         case (.talk, false), (.point, false), (.screen, false):
             keysReleased()
+        case (.meeting, true): modifierHold.cancel(); showMeetingLauncher()
         case (.dismiss, true): dismiss()
         case (.pin, true): modifierHold.cancel(); togglePin()
         case (.open, true): modifierHold.cancel(); openFirstReference()

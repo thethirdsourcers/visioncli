@@ -31,9 +31,10 @@ extension AppDelegate {
             accessibilityGranted: { [weak self] in self?.enableModifierKeys() },
             setWatchCrashes: { [weak self] in self?.setWatchCrashes($0) },
             setGhostCursor: { [weak self] in self?.setGhostCursor($0) },
-            toggleAutopilot: { [weak self] in self?.toggleAutopilot() },
-            autopilotCheckNow: { [weak self] in self?.autopilotCheckNow() },
-            setAutopilotApp: { [weak self] id, on in self?.setAutopilotApp(id, on: on) },
+            toggleMeeting: { [weak self] in self?.toggleMeeting() },
+            openMeetings: { [weak self] in self?.openMeetingsFolder() },
+            openMeeting: { [weak self] in self?.openPastMeeting($0) },
+            showMeetingPanel: { [weak self] in self?.showMeetingPanel() },
             toolsConnected: { [weak self] in self?.toolsConnected($0) ?? false },
             connectTools: { [weak self] a, done in self?.connectTools(a, done: done) },
             openIntegrations: { [weak self] in self?.openIntegrations() },
@@ -53,6 +54,7 @@ extension AppDelegate {
         s.startAtLogin = LoginItem.isEnabled
         s.autoUpdate = Settings.autoUpdate
         s.screenshotEvery = Settings.screenshotEveryQuestion
+        s.hideFromCapture = Settings.hideFromCapture
         s.version = Updater.currentVersion
         s.updateAvailable = updater.available?.version
         s.updateStatus = updater.status
@@ -94,11 +96,17 @@ extension AppDelegate {
         s.watchCrashes = Settings.watchCrashes
         s.ghostCursor = ghostCursorOn
         s.quickCommands = Settings.quickCommands
-        // Autopilot
-        s.autopilot = Settings.autopilot
-        s.autopilotCalls = autopilot.calls
-        s.autopilotApps = Settings.autopilotApps
-        s.autopilotChoices = autopilotAppChoices().map { Item(id: $0.id, name: $0.name) }
+        // Meeting Notes
+        s.meetingNotes = meeting.isOn
+        s.meetingSummarizeGuest = Settings.meetingSummarizeGuest
+        s.meetingSummarizeYou = Settings.meetingSummarizeYou
+        s.meetingReplies = Settings.meetingReplies
+        s.meetingCodeLookup = Settings.meetingCodeLookup
+        s.meetingRecord = Settings.meetingRecord
+        s.pastMeetings = MeetingNotes.past(limit: 10).map { p in
+            let first = p.record.rows.first { $0.speaker == MeetingSpeaker.guest.rawValue } ?? p.record.rows.first
+            return Item(id: p.folder.path, name: "\(MeetingNotes.listDate.string(from: p.record.started)) · \((first?.summary ?? first?.text ?? "No conversation").prefix(50))")
+        }
         // Advanced
         s.crashLogExists = ((try? FileManager.default.attributesOfItem(atPath: CrashReporter.logURL.path)[.size] as? Int) ?? 0) > 0
         return s

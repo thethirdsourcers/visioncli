@@ -31,7 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     var parakeet: ParakeetEngine?
     let flow = FlowDictation()
     let spotlight = Spotlight()
-    let autopilot = Autopilot()
+    let meeting = MeetingNotes()
+    lazy var meetingPanel = MeetingPanel(notes: meeting)
+    let meetingLauncher = MeetingLauncher()
+    var meetingParakeet: ParakeetEngine? // started for Meeting Notes when no voice engine runs
+    var meetingWhisper: WhisperEngine?
+    var meetingConsented = false         // asked once per launch; Meeting Notes itself is never remembered
     let mascot = Mascot()
     let setupWizard = SetupWizard()
     let settingsWindow = SettingsWindow()
@@ -119,6 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
 
     func applicationDidFinishLaunching(_ n: Notification) {
         MainThreadWatchdog.start()
+        CaptureHiding.start()
+        MeetingNotes.recoverRecordings()
         // Writes to a helper that just exited (claude's stdin is written on a background queue) must fail with an
         // error, not kill the app with SIGPIPE.
         signal(SIGPIPE, SIG_IGN)
@@ -209,11 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
 
         flow.onText = { [weak self] text in self?.state.question = text }
         mascot.level = { [weak self] in self?.state.level ?? 0 }
-        autopilot.claudePath = cfg.claude
-        autopilot.isBusy = { [weak self] in self?.state.phase != .hidden }
-        if Settings.autopilot { autopilot.start() }
         hotkeys = HotKeys()
         HotKeys.handler = { [weak self] key, pressed in self?.hotkey(key, pressed: pressed) }
+        hotkeys.set(.meeting, true) // ⇧⌥⌘R: Meeting Notes
         if Computer.isTrusted {
             enableModifierKeys()
         } else {

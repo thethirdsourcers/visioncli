@@ -341,16 +341,43 @@ enum Settings {
         set { d.set(newValue, forKey: "setupStep") }
     }
 
-    /// Autopilot (off by default): suggestions while you work, only in the apps listed in `autopilotApps`.
-    static var autopilot: Bool {
-        get { d.bool(forKey: "autopilot") }
-        set { d.set(newValue, forKey: "autopilot") }
+    /// Keep VisionCLI's windows (bubble, badge, Visi, cards, Settings…) out of screen sharing and recordings.
+    static var hideFromCapture: Bool {
+        get { d.bool(forKey: "hideFromCapture") }
+        set { d.set(newValue, forKey: "hideFromCapture"); CaptureHiding.applyAll() }
     }
 
-    /// Bundle ids Autopilot may read. Every other app is ignored.
-    static var autopilotApps: [String] {
-        get { d.stringArray(forKey: "autopilotApps") ?? [] }
-        set { d.set(newValue, forKey: "autopilotApps") }
+    // Meeting Notes: what it does during a meeting (Meeting Notes itself is never remembered: off at each launch).
+    private static func flag(_ key: String, default value: Bool) -> Bool { d.object(forKey: key) as? Bool ?? value }
+
+    /// A one-line summary under what colleagues say.
+    static var meetingSummarizeGuest: Bool {
+        get { flag("meetingSummarizeGuest", default: true) }
+        set { d.set(newValue, forKey: "meetingSummarizeGuest") }
+    }
+
+    /// A one-line summary under what you say (off: you know what you said).
+    static var meetingSummarizeYou: Bool {
+        get { flag("meetingSummarizeYou", default: false) }
+        set { d.set(newValue, forKey: "meetingSummarizeYou") }
+    }
+
+    /// Three suggested replies when a colleague asks you something.
+    static var meetingReplies: Bool {
+        get { flag("meetingReplies", default: true) }
+        set { d.set(newValue, forKey: "meetingReplies") }
+    }
+
+    /// Questions about the code answered from the project (read-only).
+    static var meetingCodeLookup: Bool {
+        get { flag("meetingCodeLookup", default: true) }
+        set { d.set(newValue, forKey: "meetingCodeLookup") }
+    }
+
+    /// Keep a recording of both sides, to play back with the transcript.
+    static var meetingRecord: Bool {
+        get { flag("meetingRecord", default: true) }
+        set { d.set(newValue, forKey: "meetingRecord") }
     }
 
     /// Show Claude's session / weekly usage next to the project name in the menu bar.

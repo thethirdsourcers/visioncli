@@ -30,6 +30,29 @@ extension AppDelegate {
             round(3)
         }
 
+        // Debug: `--bubble-test` shows the bubble for 30 s (checks what screen capture sees, e.g. Hide from Screen Sharing).
+        if CommandLine.arguments.contains("--bubble-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.flash("VisionCLI bubble test", seconds: 30) }
+        }
+
+        // Debug: `--meeting-launcher` shows the ⇧⌥⌘R card.
+        if CommandLine.arguments.contains("--meeting-launcher") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.showMeetingLauncher() }
+        }
+
+        // Debug: `--meeting-test [seconds]` starts Meeting Notes without the consent alert.
+        if CommandLine.arguments.contains("--meeting-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                self.meetingConsented = true
+                self.toggleMeeting()
+                // `--meeting-test 40`: stops it after 40 s (checks the summary and the recording).
+                if let i = CommandLine.arguments.firstIndex(of: "--meeting-test"), i + 1 < CommandLine.arguments.count,
+                   let seconds = Double(CommandLine.arguments[i + 1]) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { if self.meeting.isOn { self.toggleMeeting() } }
+                }
+            }
+        }
+
         // Debug: `--probe-terminal` logs what the front terminal tab is running (project, claude session).
         if CommandLine.arguments.contains("--probe-terminal") {
             DispatchQueue.global().async {

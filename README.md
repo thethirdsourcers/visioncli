@@ -21,7 +21,7 @@ by typing or <b>by voice</b>, with the AI you already use: <b>Claude Code</b> or
 - **Hold ⌥ and ask out loud** (⌥⌘ to include a screenshot). Visi, a little robot, peeks in from the edge of the screen while it listens and thinks; the answer appears in the top-right corner and is read aloud.
 - **Claude or Gemini, your choice.** Uses your own `claude` or `agy` sign-in (no API keys) and the session already running for that project, so you can type and talk in the same conversation. Pick the model and effort in VisionCLI menu → Settings… → Assistant.
 - **Uses your computer.** "Open Xcode and run the app", "fill this form", "switch the dropdown to Production": it clicks, types, presses shortcuts and opens apps, one checked step at a time, reading each app's real buttons and fields through Accessibility. You approve each action (or allow all), passwords and System Settings always ask, a task panel shows every step with Pause/Stop, and **Esc stops it instantly**.
-- **Autopilot (optional).** In the apps you choose, it offers a suggestion when it spots something useful, and drafts chat replies you can drop into the reply box. Nothing is sent for you.
+- **Meeting Notes (optional).** In a meeting, it transcribes your colleagues (your computer's sound) and you (the microphone) on your computer and shows the conversation in a side panel. Each colleague's turn gets a one-line summary. When you're asked something, three short replies appear once they've finished talking. Questions about the code are answered from your project. Each meeting is saved with its notes, a summary at the end and a recording you can play back. Nothing is sent for you.
 - **Notices crashes.** When your app (Mac or Simulator) crashes, VisionCLI offers to explain it, and the next question already knows which crash report to read.
 - **Points and draws.** Answers point at things on your real screen (boxes, circles, arrows, numbered steps) and can include **Mermaid diagrams** rendered in the bubble.
 - **Fast browser control.** "Open the Stripe tab", "click sign in", "pause the video" run in under a second (via TypeSafe Jev), with a visible AI cursor. Forms, dropdowns, toggles and framed portals work through the page itself, without opening stray tabs.
@@ -194,7 +194,7 @@ Slash commands: `/mcp__visioncli__see <question>`, `/mcp__visioncli__point <ques
 - **Assistant:** Claude Code or Gemini (Antigravity), where answers appear (terminal or bubble only), model, effort, fast model for simple questions.
 - **Voice:** read answers aloud, speed, voice (with a sample), natural voice download, speech recognition (Parakeet, Wispr Flow, Whisper, Apple), vocabulary, microphone and speaker.
 - **Computer Control:** ask before each action, allow all, or off; Accessibility; AI cursor and instant commands in the browser; watch for app crashes.
-- **Autopilot:** on/off, checks this hour, and the apps it may read.
+- **Meeting Notes:** on/off, summaries (colleagues, you), suggested replies, code answers, recording, past meetings, and hiding VisionCLI from screen sharing.
 - **Integrations:** connect VisionCLI's tools to Claude Code, Antigravity and Gemini CLI; API keys.
 - **Advanced:** Fix Permissions, log, crash log, home folder.
 

@@ -57,3 +57,30 @@ private struct WindowVisibilityReader: NSViewRepresentable {
         deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
     }
 }
+
+/// "Hide VisionCLI from screen sharing and recordings": every window the app shows gets `sharingType = .none`
+/// (`.readOnly` when off). Windows are made in many places and some only once shown, so instead of touching each,
+/// this re-applies the setting whenever any window updates, appears or becomes key, plus a pass when it changes.
+enum CaptureHiding {
+    private static var observers: [NSObjectProtocol] = []
+
+    static var desired: NSWindow.SharingType { Settings.hideFromCapture ? .none : .readOnly }
+
+    static func start() {
+        guard observers.isEmpty else { return }
+        let nc = NotificationCenter.default
+        for name in [NSWindow.didUpdateNotification, NSWindow.didChangeOcclusionStateNotification, NSWindow.didBecomeKeyNotification] {
+            observers.append(nc.addObserver(forName: name, object: nil, queue: .main) { n in
+                if let w = n.object as? NSWindow { apply(w) }
+            })
+        }
+        applyAll()
+    }
+
+    static func apply(_ w: NSWindow) {
+        let want = desired
+        if w.sharingType != want { w.sharingType = want }
+    }
+
+    static func applyAll() { NSApp?.windows.forEach(apply) }
+}

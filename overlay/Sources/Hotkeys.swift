@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 
 // MARK: - Hotkeys (Carbon: no Accessibility permission needed)
 
-enum HotKey: UInt32 { case talk = 1, point, dismiss, pin, open, allow, screen }
+enum HotKey: UInt32 { case talk = 1, point, dismiss, pin, open, allow, screen, meeting }
 
 final class HotKeys {
     static var handler: (HotKey, Bool) -> Void = { _, _ in }
@@ -18,6 +18,7 @@ final class HotKeys {
         .pin: (kVK_ANSI_P, optionKey),
         .open: (kVK_ANSI_O, optionKey),
         .allow: (kVK_Return, optionKey),
+        .meeting: (kVK_ANSI_R, cmdKey | optionKey | shiftKey),
     ]
 
     init() {

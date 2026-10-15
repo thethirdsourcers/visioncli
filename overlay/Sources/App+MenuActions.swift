@@ -32,53 +32,6 @@ extension AppDelegate {
 
     @objc func showHistoryMenu() { showHistory() }
 
-    @objc func toggleAutopilot() {
-        if Settings.autopilot {
-            Settings.autopilot = false
-            autopilot.stop()
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Turn on Autopilot?"
-        alert.informativeText = """
-        While you work in the apps you tick under Autopilot, VisionCLI reads the front window's text (a small screenshot \
-        if there's almost no text) and sends it to Claude Haiku for a suggestion: about 1k tokens a look, at most \
-        \(Autopilot.hourlyCap) an hour. Password fields and password managers are skipped; other apps are never read.
-
-        In chat apps it can draft a reply. Nothing is ever sent: you choose Put in reply box or Copy, and press Enter yourself.
-        """
-        alert.addButton(withTitle: "Turn On")
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        Settings.autopilot = true
-        autopilot.start()
-        if Settings.autopilotApps.isEmpty { log("autopilot: on, but no apps picked yet") }
-    }
-
-    @objc func autopilotCheckNow() { autopilot.checkNow() }
-
-    /// Lets Autopilot read this app (bundle id), or stops it.
-    func setAutopilotApp(_ id: String, on: Bool) {
-        var apps = Settings.autopilotApps.filter { $0 != id }
-        if on { apps.append(id) }
-        Settings.autopilotApps = apps
-    }
-
-    /// Apps Autopilot can be allowed to read: running regular apps (minus the never-read list and terminals) plus the
-    /// ones already chosen, sorted by name.
-    func autopilotAppChoices() -> [(name: String, id: String)] {
-        let mine = Bundle.main.bundleIdentifier
-        var apps: [(name: String, id: String)] = NSWorkspace.shared.runningApplications.compactMap { a in
-            guard a.activationPolicy == .regular, let id = a.bundleIdentifier, id != mine,
-                  !Autopilot.skipBundles.contains(id), !terminalApps.contains((a.localizedName ?? "").lowercased()) else { return nil }
-            return (a.localizedName ?? id, id)
-        }
-        for id in Settings.autopilotApps where !apps.contains(where: { $0.id == id }) { apps.append((id, id)) }
-        var seenIds = Set<String>()
-        return apps.filter { seenIds.insert($0.id).inserted }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
     /// The browser layer's animated cursor; off = a marker file the node side checks.
     var ghostCursorOn: Bool { !FileManager.default.fileExists(atPath: ghostOffFile.path) }
 

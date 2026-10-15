@@ -237,6 +237,126 @@ func testMenuLabels() {
     eq(MenuLabels.followedModel(used: "gpt-whatever", menu: "opus"), nil, "unknown model ignored")
 }
 
+// MARK: - Meeting Notes
+
+func testMeeting() {
+    func tone(_ seconds: Double, _ amp: Double) -> [Int16] {
+        (0..<Int(seconds * 16000)).map { Int16(amp * 32767 * sin(Double($0) * 2 * .pi * 220 / 16000)) }
+    }
+    let quiet = [Int16](repeating: 0, count: 16000)
+    var seg = SpeechSegmenter()
+    var got = seg.feed(quiet + tone(2, 0.3) + quiet)
+    eq(got.count, 1, "one utterance from 2 s of speech")
+    check(got.first.map { $0.count >= 32000 && $0.count <= 32000 + 20000 } ?? false, "utterance holds the speech plus pre-roll and tail")
+    seg = SpeechSegmenter()
+    eq(seg.feed(quiet + tone(0.4, 0.3) + quiet).count, 0, "under 0.8 s of speech dropped")
+    seg = SpeechSegmenter()
+    got = seg.feed(tone(25, 0.3))
+    eq(got.count, 1, "a 25 s monologue is cut at 20 s")
+    seg = SpeechSegmenter()
+    eq(seg.feed(tone(3, 0.005)).count, 0, "quiet hum isn't speech")
+    seg = SpeechSegmenter()
+    var pieces = 0
+    let all = quiet + tone(1.5, 0.3) + quiet
+    for i in stride(from: 0, to: all.count, by: 1000) { pieces += seg.feed(Array(all[i..<min(i + 1000, all.count)])).count }
+    eq(pieces, 1, "feeding in small chunks gives the same utterance")
+    seg = SpeechSegmenter()
+    _ = seg.feed(quiet + tone(1, 0.3))
+    check(seg.inSpeech, "in speech mid-utterance")
+    seg.reset()
+    eq(seg.feed(quiet).count, 0, "reset drops the utterance in progress")
+
+    check(MeetingText.isQuestion("What is the difference between a process and a thread?"), "question mark")
+    check(MeetingText.isQuestion("Why Java?"), "a short question with a question mark")
+    check(MeetingText.isQuestion("So, tell me about your last project"), "filler then tell me")
+    check(MeetingText.isQuestion("okay um how would you design a cache"), "fillers then how")
+    check(!MeetingText.isQuestion("I worked on the payments team for two years."), "statement")
+    check(!MeetingText.isQuestion("Whatever you think is best here"), "whatever isn't what")
+    check(MeetingText.isJunk("[BLANK_AUDIO]"), "blank audio")
+    check(MeetingText.isJunk("Thank you."), "thank you")
+    check(MeetingText.isJunk("Okay."), "one word")
+    check(MeetingText.isJunk(" ... "), "punctuation only")
+    check(!MeetingText.isJunk("Tell me more."), "real speech kept")
+
+    // Turns
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    func at(_ s: Double) -> Date { t0.addingTimeInterval(s) }
+    var tb = TurnBuilder()
+    check(tb.add(.guest, "Hi there.", start: at(0), end: at(1)) == nil, "first utterance opens a turn")
+    check(tb.add(.guest, "How are you?", start: at(1.5), end: at(3)) == nil, "same speaker soon after: same turn")
+    eq(tb.open?.text, "Hi there. How are you?", "merged text")
+    check(tb.close(at: at(4), busy: false) == nil, "not closed before the gap")
+    check(tb.close(at: at(6), busy: true) == nil, "not closed while they're mid-utterance")
+    let closedGuest = tb.add(.you, "Good, thanks.", start: at(3.5), end: at(4.5))
+    eq(closedGuest?.text, "Hi there. How are you?", "the other speaker closes the turn")
+    eq(closedGuest?.end, at(3), "turn end is its last utterance's end")
+    let byPause = tb.close(at: at(7), busy: false)
+    eq(byPause?.speaker, .you, "a pause closes the turn")
+    check(tb.open == nil, "nothing open after closing")
+    _ = tb.add(.guest, "One.", start: at(10), end: at(11))
+    eq(tb.add(.guest, "Two.", start: at(14), end: at(15))?.text, "One.", "same speaker after the gap: new turn")
+    let reopened = MeetingTurn(id: 99, speaker: .guest, start: at(20), end: at(21), text: "Why Java")
+    eq(tb.reopen(reopened)?.text, "Two.", "reopening hands back what was open")
+    _ = tb.add(.guest, "over Kotlin?", start: at(21.5), end: at(22))
+    eq(tb.open?.text, "Why Java over Kotlin?", "a reopened turn goes on")
+    eq(tb.open?.id, 99, "and keeps its id")
+    eq(tb.finish()?.id, 99, "finish returns the open turn")
+
+    // Echo
+    let spans = [(start: at(0), end: at(4))]
+    check(EchoFilter.isEcho(text: "anything", start: at(0.5), end: at(3.5), guestSpans: spans, guestLines: []), "mic during guest speech is echo")
+    check(!EchoFilter.isEcho(text: "anything at all", start: at(3), end: at(8), guestSpans: spans, guestLines: []), "mostly after the guest: real")
+    let lines = [(at: at(4), text: "Can you tell me about your last project?")]
+    check(EchoFilter.isEcho(text: "tell me about your last project", start: at(10), end: at(12), guestSpans: [], guestLines: lines), "same words soon after: echo")
+    check(!EchoFilter.isEcho(text: "tell me about your last project", start: at(30), end: at(32), guestSpans: [], guestLines: lines), "same words much later: real")
+    check(!EchoFilter.isEcho(text: "I built a payments system in Go", start: at(5), end: at(7), guestSpans: [], guestLines: lines), "different words: real")
+    eq(EchoFilter.overlap((at(0), at(10)), [(at(2), at(4)), (at(6), at(7))]), 0.3, "overlap adds up spans")
+
+    var cap = HourlyCap(limit: 2)
+    cap.use(at: at(0)); cap.use(at: at(1))
+    check(!cap.allows(at: at(2)), "cap reached")
+    check(cap.allows(at: at(3601)), "cap rolls over")
+
+    // Prompts and parsing
+    let g = MeetingTurn(id: 1, speaker: .guest, start: at(0), end: at(2), text: "Why do you choose Java?")
+    let y = MeetingTurn(id: 2, speaker: .you, start: at(3), end: at(5), text: "It's what the team knows.")
+    let msg = MeetingAI.repliesMessage(context: [y], turn: g)
+    check(msg.hasPrefix("Recent conversation:\n[") && msg.contains("You: It's what the team knows.") && msg.hasSuffix("The guest just said: \"Why do you choose Java?\""), "replies message")
+    eq(MeetingAI.summaryMessage(context: [], turn: y), "New turn (You): \"It's what the team knows.\"", "summary message without context")
+    eq(MeetingAI.context((1...15).map { MeetingTurn(id: $0, speaker: .guest, start: at(0), end: at(0), text: "\($0)") }).split(separator: "\n").count, 10, "context keeps the last 10 turns")
+    eq(MeetingAI.parseReplies("```json\n{\"replies\": [\"Yes, happy to.\", \" - No, sorry \", \"\", 4, \"Which day?\", \"Extra\"]}\n```"),
+       ["Yes, happy to.", "No, sorry", "Which day?"], "replies parsed, cleaned, at most 3")
+    check(MeetingAI.parseReplies("{\"replies\": []}") == nil, "no replies")
+    check(MeetingAI.parseReplies("Sorry, I can't.") == nil, "prose")
+    let sum = MeetingAI.parseSummary("Here: {\"summary\": \" Asks why Java \", \"question\": true}")
+    eq(sum?.summary, "Asks why Java", "summary parsed")
+    eq(sum?.question, true, "question flag")
+    eq(MeetingAI.parseSummary("{\"summary\": \"x\"}")?.question, false, "question defaults to false")
+    eq(MeetingAI.parseSummary("{\"summary\": \"x\"}")?.lookup, false, "lookup defaults to false")
+    eq(MeetingAI.parseSummary("{\"summary\": \"Asks the retry timeout\", \"question\": true, \"lookup\": true}")?.lookup, true, "lookup flag")
+    check(MeetingAI.lookupMessage(context: [], turn: g).hasSuffix("asked: \"Why do you choose Java?\""), "lookup message")
+    check(MeetingAI.parseSummary("{\"question\": true}") == nil, "summary required")
+    eq(MeetingAI.result(streamLine: "{\"type\":\"result\",\"result\":\"{}\"}"), "{}", "result line")
+    check(MeetingAI.result(streamLine: "{\"type\":\"assistant\"}") == nil, "other lines ignored")
+
+    // File
+    eq(MeetingFile.entry(g, summary: "Asks why Java", replies: ["Team skills.", "Ecosystem."]),
+       "**Guest** · \(MeetingAI.timeFormat.string(from: at(0)))\nWhy do you choose Java?\n> Asks why Java\n\nReply options:\n- Team skills.\n- Ecosystem.\n\n", "file entry")
+    let file = "# Meeting notes · x\n\n## Transcript\n\nturns\n"
+    eq(MeetingFile.withSummary(file, "## Overview\nShort.\n"), "# Meeting notes · x\n\n## Overview\nShort.\n\n## Transcript\n\nturns\n", "summary above the transcript")
+
+    eq(MeetingMix.mix([100, 30000, -30000], [50, 10000]), [150, 32767, -30000], "mix sums, clips, and pads the shorter track")
+    eq(MeetingRecord.current([0, 4.5, 10], at: 5), 1, "the row playing at 5 s")
+    eq(MeetingRecord.current([0, 4.5, 10], at: 4.47), 1, "a row just about to start counts")
+    eq(MeetingRecord.current([2, 4.5], at: 1), nil, "nothing before the first row")
+    eq(MeetingFile.folderName(at(0)).count, "yyyy-MM-dd HH-mm-ss".count, "folder name")
+    let w = MeetingAudio.wav([1, -1, 300])
+    eq(w.count, 44 + 6, "wav size")
+    eq(String(data: w.prefix(4), encoding: .ascii), "RIFF", "wav header")
+    eq(MeetingAudio.to16k([0, 0.5, 1, 0.5, 0, -0.5], rate: 48000).count, 2, "48 kHz to 16 kHz")
+    eq(MeetingAudio.to16k([0.5], rate: 16000), [16383], "16 kHz passes through")
+}
+
 testSpokenText()
 testVocabulary()
 testQuickCommands()
@@ -247,6 +367,7 @@ testMarkup()
 testDiagramText()
 testMenuLabels()
 testBrowserTaskText()
+testMeeting()
 
 print("\(checks - failures)/\(checks) checks passed")
 if failures > 0 {
