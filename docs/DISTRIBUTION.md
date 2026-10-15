@@ -1,16 +1,34 @@
 # Distribution
 
 How VisionCLI reaches users beyond the GitHub release, which warning each channel removes, and the one-time steps
-the owner takes to switch each one on. Everything here is free. Every job is wired into
-`.github/workflows/release.yml` (and `site.yml`) and **skips with a notice** until its secret or variable exists, so
-nothing fails while a channel isn't set up yet.
+the owner takes to switch each one on. Everything here is free. Every job is wired into one of the per-platform
+release workflows (`release-mac.yml`, `release-linux.yml`, `release-windows.yml`, plus `site.yml`) and **skips with a
+notice** until its secret or variable exists, so nothing fails while a channel isn't set up yet.
+
+## Releasing
+
+Releases are started by hand, one platform at a time, so each release only uses the runners it needs:
+
+1. Bump the version (`package.json`, `.claude-plugin/plugin.json`, `app/package.json`), add the CHANGELOG section,
+   commit, then push the commit and the tag: `git tag v0.11.0 && git push origin main v0.11.0`. Pushing a tag
+   doesn't build anything by itself.
+2. In GitHub → Actions, run **Release macOS**, **Release Linux** and/or **Release Windows** with that tag, or from the
+   terminal: `gh workflow run release-mac.yml -f tag=v0.11.0` (likewise `release-linux.yml`, `release-windows.yml`).
+   The first one creates the GitHub release with the CHANGELOG notes; each adds its files and its lines in
+   `SHA256SUMS.txt`.
+3. Options per workflow: Linux and Windows can skip the arm64 build (`-f arm64=false`); Linux updates the website
+   with its apt/dnf repositories (on by default) and the Snap Store; macOS updates Homebrew; Windows opens the winget
+   update. macOS and Windows can rebuild the website too (`-f site=true`).
+
+Each app only updates itself from a release that has its own platform's file, so releasing one platform first
+doesn't affect the others.
 
 Website and package repositories: **https://visioncli.thethirdsourcers.com** (GitHub Pages, `gh-pages` branch).
 Contact: visioncli@thethirdsourcers.com. Publisher: Third Sourcers.
 
 ## Channels
 
-| Channel | Users run | Automated on each `v*` tag | Removes | Switched on by |
+| Channel | Users run | Automated in its release workflow | Removes | Switched on by |
 | --- | --- | --- | --- | --- |
 | GitHub release (today) | download `.dmg` / AppImage / `.deb` / `.rpm` / `.exe` | yes (existing jobs, plus `.rpm` and the unpacked `.tar.gz`) | nothing by itself | already on |
 | Build provenance | `gh attestation verify <file> -R thethirdsourcers/visioncli` | yes, every release file | lets anyone prove a file was built by this repo's workflow from a given commit (no OS warning changes) | the repo being public (done) |
@@ -39,13 +57,14 @@ What each OS shows today, and what changes it:
 
 ## What's automated where
 
-- `release.yml`
-  - `build` (macOS), `linux`, `linux-release`, `windows`, `windows-release`: as before, plus `.rpm` and
-    `VisionCLI-<v>-linux-{x64,arm64}.tar.gz` (the unpacked app, input for Flatpak and snap) on Linux, optional SignPath
-    signing and the optional Store `.msix` on Windows, and `actions/attest-build-provenance@v2` after every upload
-    (only when the repository is public; GitHub's free plans attest public repositories only).
-  - `site`: calls `site.yml` after the uploads (a release created with `GITHUB_TOKEN` doesn't trigger other workflows).
-  - `homebrew`, `winget`, `snap`: one job per channel, each checking its secret first.
+- `release-mac.yml`: `build` (universal `.dmg`/`.zip`, signed), `publish` (uploads, provenance), `homebrew`, `site`
+  (optional).
+- `release-linux.yml`: `build` (AppImage, `.deb`, `.rpm` and `VisionCLI-<v>-linux-{x64,arm64}.tar.gz`, the unpacked
+  app for Flatpak and snap; arm64 optional), `publish`, `site` (the apt/dnf repositories), `snap`.
+- `release-windows.yml`: `build` (NSIS installers, optional SignPath signing and the optional Store `.msix`; arm64
+  optional), `publish`, `winget`, `site` (optional).
+- Every `publish` runs `scripts/release-upload.sh` (creates the release if needed, merges `SHA256SUMS.txt`) in one
+  concurrency group per tag, then `actions/attest-build-provenance@v2` (public repositories only).
 - `site.yml` (also on `release: published` and by hand): `packaging/site/build.sh` builds the page, `CNAME`,
   `public.key`, the apt repository (`dists/stable/main/binary-{amd64,arm64}` with `Packages(.gz)`, `Release`,
   `InRelease`, `Release.gpg`, built with `apt-ftparchive` from the release's `.deb` files), the rpm repository

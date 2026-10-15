@@ -1,7 +1,7 @@
 name: Site
 
 # The website and the apt/dnf repositories on GitHub Pages (https://visioncli.thethirdsourcers.com), published to the
-# gh-pages branch. release.yml calls this after each release (a release made with GITHUB_TOKEN doesn't fire
+# gh-pages branch. The release workflows (release-linux.yml, and the others when asked) call this after a release (a release made with GITHUB_TOKEN doesn't fire
 # `release: published`); the other triggers cover releases published by hand and rebuilds.
 
 on:

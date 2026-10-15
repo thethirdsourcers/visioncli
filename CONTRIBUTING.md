@@ -31,7 +31,7 @@ Run them locally:
 - **Linux/Windows app:** `cd app && npm start` (Linux and Windows; on macOS it builds but the desktop parts are for Linux/Windows).
 - **Windows helper:** `sh app/native/windows/build.sh` (builds on macOS too, with the .NET SDK).
 
-CI runs every test on macOS, Ubuntu and Windows for each pull request, plus the Windows helper's self-test and a launch with a screenshot.
+CI runs on pull requests, per platform and only for the parts a change touches (`ci-mac.yml`, `ci-linux.yml`, `ci-windows.yml`): the tests, plus the Windows helper's self-test and a launch with a screenshot. Pushes to main don't run it, so run the tests above before pushing.
 
 ## Pull requests
 

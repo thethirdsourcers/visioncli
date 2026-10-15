@@ -9,7 +9,7 @@ people have downloaded it. Until it's set up the Windows build stays unsigned, a
 
 ## What the release workflow does
 
-In the `windows` job of `.github/workflows/release.yml`, when the secret and the three variables below exist:
+In the `build` job of `.github/workflows/release-windows.yml`, when the secret and the three variables below exist:
 
 1. `package-release-win.ps1 -Stage unpacked` packs the app (`app/dist/win-unpacked`, or `win-arm64-unpacked`).
 2. That folder is uploaded as a workflow artifact and sent to SignPath with artifact configuration **`app`**

@@ -2,7 +2,7 @@
 # installer (no admin). The version is the repo's (package.json at the root), so a tag only needs the root bump.
 #   pwsh app/scripts/package-release-win.ps1 [-Arch x64|arm64]     (default: this machine's arch)
 # arm64 builds fine on an x64 machine (electron-builder fetches the arm64 Electron; the C# helper is AnyCPU).
-# Stages, so CI can code-sign the app's exes between packing and the installer (SignPath, release.yml):
+# Stages, so CI can code-sign the app's exes between packing and the installer (SignPath, release-windows.yml):
 #   -Stage all        (default) the installer, as one step
 #   -Stage unpacked   only app/dist/win-unpacked (win-arm64-unpacked for arm64)
 #   -Stage installer  the installer from an already packed folder (-Unpacked <dir>, e.g. the signed copy)

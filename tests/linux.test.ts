@@ -44,7 +44,7 @@ describe("linux window listing", () => {
   });
 });
 
-// CI runs this under Xvfb + openbox with an xterm and an xclock, the mouse over the clock (.github/workflows/ci.yml).
+// CI runs this under Xvfb + openbox with an xterm and an xclock, the mouse over the clock (.github/workflows/ci-linux.yml).
 describe("linux capture on a real X server", { skip: !process.env.VISIONCLI_LINUX_SMOKE && "set VISIONCLI_LINUX_SMOKE=1 under X11" }, () => {
   test("lists windows, reads the pointer, captures the window under it and the screen", async () => {
     const windows = await listWindows();

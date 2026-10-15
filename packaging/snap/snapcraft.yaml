@@ -1,6 +1,6 @@
 # Snap Store package (packaging/snap/README.md). Classic confinement: VisionCLI runs the user's own CLIs (claude,
 # agy, gemini, tmux) and desktop tools, reads /dev/input and the whole screen, which strict confinement can't allow.
-# It repackages the release's unpacked app; release.yml sets the version and @VERSION@ for each tag.
+# It repackages the release's unpacked app; release-linux.yml sets the version and @VERSION@ for each tag.
 #   snapcraft pack     (in this folder, after setting the version)
 name: visioncli
 title: VisionCLI
@@ -17,7 +17,7 @@ contact: visioncli@thethirdsourcers.com
 website: https://visioncli.thethirdsourcers.com
 source-code: https://github.com/thethirdsourcers/visioncli
 issues: https://github.com/thethirdsourcers/visioncli/issues
-# docs/logo.png, copied here before building (release.yml; locally: cp ../../docs/logo.png visioncli.png).
+# docs/logo.png, copied here before building (release-linux.yml; locally: cp ../../docs/logo.png visioncli.png).
 icon: visioncli.png
 base: core24
 grade: stable

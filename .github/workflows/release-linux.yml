@@ -1,0 +1,150 @@
+name: Release Linux
+
+# Started by hand (Actions → Release Linux → Run workflow) with a tag that's already pushed: AppImage, .deb, .rpm and
+# the tarball per arch (app/scripts/package-release.sh), then the website's apt/dnf repositories and the Snap Store.
+# The first platform released for a tag creates the GitHub release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag to release, already pushed (e.g. v0.11.0)
+        required: true
+      arm64:
+        description: Also build arm64 (a second runner)
+        type: boolean
+        default: true
+      site:
+        description: Update the website and its apt/dnf repositories
+        type: boolean
+        default: true
+      snap:
+        description: Publish to the Snap Store
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: ${{ fromJSON(inputs.arm64 && '["x64","arm64"]' || '["x64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+      - name: fpm for the arm64 .deb (electron-builder only bundles an x86_64 one)
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ruby
+          sudo gem install --no-document fpm
+      - name: rpmbuild for the .rpm
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rpm
+      - name: Build AppImage, .deb, .rpm and the tarball
+        run: sh app/scripts/package-release.sh ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-files-${{ inputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: linux-*
+          merge-multiple: true
+          path: release
+      - name: Upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: sh scripts/release-upload.sh "${{ inputs.tag }}" '\.(AppImage|deb|rpm|tar\.gz)$' release $(cd release && ls *.AppImage *.deb *.rpm *.tar.gz)
+      - name: Attest build provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+
+  # The website and the apt/dnf repositories on GitHub Pages.
+  site:
+    needs: publish
+    if: inputs.site
+    permissions:
+      contents: write
+    uses: ./.github/workflows/site.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit
+
+  # Snap Store (classic confinement, packaging/snap/README.md), repackaging the release tarball per arch.
+  snap:
+    needs: publish
+    if: inputs.snap
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(inputs.arm64 && '["x64","arm64"]' || '["x64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - name: Snap Store credentials configured?
+        id: check
+        run: |
+          if [ -n "$SNAPCRAFT_STORE_CREDENTIALS" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Snap not published: SNAPCRAFT_STORE_CREDENTIALS isn't set (packaging/snap/README.md)."; fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Point snapcraft.yaml at this release
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          version="${TAG#v}"
+          sed -i -e "s/^version: .*/version: '$version'/" -e "s/@VERSION@/$version/g" packaging/snap/snapcraft.yaml
+          cp docs/logo.png packaging/snap/visioncli.png
+          grep -n -e '^version' -e 'source:' packaging/snap/snapcraft.yaml
+      - if: steps.check.outputs.enabled == 'true'
+        uses: snapcore/action-build@v1
+        id: build
+        with:
+          path: packaging/snap
+      - if: steps.check.outputs.enabled == 'true'
+        uses: snapcore/action-publish@v1
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: stable

@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
 # winget version manifest (packaging/winget/README.md). The first version is submitted by hand; later ones by
-# the winget job in .github/workflows/release.yml.
+# the winget job in .github/workflows/release-windows.yml.
 PackageIdentifier: TheThirdSourcers.VisionCLI
 PackageVersion: 0.10.4
 DefaultLocale: en-US

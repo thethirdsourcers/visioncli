@@ -1,0 +1,57 @@
+name: CI Linux
+
+# The MCP server's tests with a Linux capture smoke test, and the desktop app's tests and packaging dry run.
+# Runs on pull requests that touch these files, and by hand (Actions → CI Linux → Run workflow). Not on every push to
+# main: maintainers run the tests locally (README → Build and test), which keeps the Actions budget for releases.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app/**"
+      - "src/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - ".github/workflows/ci-linux.yml"
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - name: Linux capture smoke test (X11 under Xvfb)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb openbox wmctrl x11-utils xdotool maim imagemagick x11-apps xterm
+          Xvfb :99 -screen 0 1440x900x24 & sleep 1
+          export DISPLAY=:99
+          openbox & sleep 1
+          xterm -geometry 100x30+0+0 & xclock -geometry 400x400+700+100 & sleep 2
+          xdotool mousemove 800 200
+          VISIONCLI_LINUX_SMOKE=1 npm test -- linux
+
+  # The desktop app (app/, Linux and Windows): build, its tests, and a packaging dry run (electron-builder config and hooks).
+  linux-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+      - run: npm ci # build.mjs bundles the MCP server from ../src
+      - run: cd app && npm ci && npm test
+      - name: Package (unpacked dir, no installers)
+        run: cd app && npx electron-builder --linux dir --publish never && ls dist/linux-unpacked dist/linux-unpacked/resources

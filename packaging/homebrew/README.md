@@ -6,7 +6,7 @@
 brew install --cask thethirdsourcers/tap/visioncli
 ```
 
-The `homebrew` job in `.github/workflows/release.yml` downloads each release's `.dmg`, fills in `version` and
+The `homebrew` job in `.github/workflows/release-mac.yml` downloads each release's `.dmg`, fills in `version` and
 `sha256`, and pushes `Casks/visioncli.rb` to the tap. Without the secret `HOMEBREW_TAP_TOKEN` it prints a notice and
 stops.
 

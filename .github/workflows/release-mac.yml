@@ -1,0 +1,149 @@
+name: Release macOS
+
+# Started by hand (Actions → Release macOS → Run workflow) with a tag that's already pushed. Each platform has its own
+# release workflow, so a release can ship one platform at a time and only pays for the runners it needs. The first
+# one to run for a tag creates the GitHub release (notes from CHANGELOG.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag to release, already pushed (e.g. v0.11.0)
+        required: true
+      homebrew:
+        description: Update the Homebrew cask
+        type: boolean
+        default: true
+      site:
+        description: Rebuild the website afterwards (download links)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  # Build provenance: a signed statement that each file came from this workflow (public repositories only).
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      # The Parakeet helper (FluidAudio) needs a recent Swift compiler; older ones crash on it.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Import the stable signing identity
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/release.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/release.p12"
+      - name: Build universal app, dmg and zip
+        env:
+          VISIONCLI_SIGN_IDENTITY: VisionCLI Release
+        run: sh scripts/package-release.sh
+      - name: Check the signature
+        run: codesign -dr - overlay/build/VisionCLI.app 2>&1 | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  # Adds the files to the release (created here if this platform goes first) and their sums to SHA256SUMS.txt.
+  # The per-tag group keeps the platforms' uploads from rewriting SHA256SUMS.txt at the same time.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-files-${{ inputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: release
+      - name: Upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: sh scripts/release-upload.sh "${{ inputs.tag }}" '\.(dmg|zip)$' release $(cd release && ls *.dmg *.zip)
+      # Verify with: gh attestation verify <file> -R thethirdsourcers/visioncli
+      - name: Attest build provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.dmg
+            release/*.zip
+
+  # Homebrew cask in thethirdsourcers/homebrew-tap (packaging/homebrew/visioncli.rb, sha256 filled in here).
+  homebrew:
+    needs: publish
+    if: inputs.homebrew
+    runs-on: ubuntu-latest
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Tap token configured?
+        id: check
+        run: |
+          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Homebrew tap not updated: HOMEBREW_TAP_TOKEN isn't set (packaging/homebrew/README.md)."; fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Update Casks/visioncli.rb
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          version="${TAG#v}"
+          gh release download "$TAG" -p "VisionCLI-$version-macos.dmg" -D "$RUNNER_TEMP"
+          sha=$(sha256sum "$RUNNER_TEMP/VisionCLI-$version-macos.dmg" | cut -d' ' -f1)
+          git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/thethirdsourcers/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          mkdir -p "$RUNNER_TEMP/tap/Casks"
+          sed -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 .*/  sha256 \"$sha\"/" \
+            packaging/homebrew/visioncli.rb > "$RUNNER_TEMP/tap/Casks/visioncli.rb"
+          cd "$RUNNER_TEMP/tap"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/visioncli.rb
+          git diff --cached --quiet && { echo "Cask already at $version"; exit 0; }
+          git commit -m "visioncli $version"
+          git push
+
+  site:
+    needs: publish
+    if: inputs.site
+    permissions:
+      contents: write
+    uses: ./.github/workflows/site.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit

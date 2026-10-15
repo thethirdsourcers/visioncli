@@ -1,0 +1,217 @@
+name: Release Windows
+
+# Started by hand (Actions → Release Windows → Run workflow) with a tag that's already pushed: a per-user NSIS
+# installer per arch (app/scripts/package-release-win.ps1), signed by SignPath and packaged for the Microsoft Store
+# once those are configured, then winget. The first platform released for a tag creates the GitHub release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag to release, already pushed (e.g. v0.11.0)
+        required: true
+      arm64:
+        description: Also build arm64 (a second runner)
+        type: boolean
+        default: true
+      winget:
+        description: Open the winget-pkgs update
+        type: boolean
+        default: true
+      site:
+        description: Rebuild the website afterwards (download links)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  # Windows: a per-user NSIS installer per arch, built natively on x64 and arm64.
+  build:
+    strategy:
+      fail-fast: false # one arch failing shouldn't cancel the other
+      matrix:
+        arch: ${{ fromJSON(inputs.arm64 && '["x64","arm64"]' || '["x64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+      # SignPath (free for open source, packaging/windows/SIGNPATH.md) signs VisionCLI.exe and vcli-win.exe before
+      # NSIS packs them, then the installer. Without its token and variables everything stays unsigned, as before.
+      - name: Code signing configured?
+        id: signing
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          if [ -n "$SIGNPATH_API_TOKEN" ] && [ -n "$SIGNPATH_ORGANIZATION_ID" ] && [ -n "$SIGNPATH_PROJECT_SLUG" ] && [ -n "$SIGNPATH_SIGNING_POLICY_SLUG" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Windows code signing skipped: SIGNPATH_API_TOKEN or the SIGNPATH_* variables aren't set (packaging/windows/SIGNPATH.md). The installer is unsigned."
+          fi
+      - name: Build the installer
+        if: steps.signing.outputs.enabled != 'true'
+        shell: pwsh
+        run: ./app/scripts/package-release-win.ps1 -Arch ${{ matrix.arch }}
+      - name: Pack the app (to sign)
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: ./app/scripts/package-release-win.ps1 -Arch ${{ matrix.arch }} -Stage unpacked
+      - name: Upload the unsigned app for SignPath
+        if: steps.signing.outputs.enabled == 'true'
+        id: unsigned-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-app-${{ matrix.arch }}
+          path: app/dist/${{ matrix.arch == 'x64' && 'win-unpacked' || 'win-arm64-unpacked' }}
+          if-no-files-found: error
+      - name: Sign the app's exes
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: app/dist/signed-unpacked
+      - name: Build the installer from the signed app
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: ./app/scripts/package-release-win.ps1 -Arch ${{ matrix.arch }} -Stage installer -Unpacked app/dist/signed-unpacked
+      - name: Upload the unsigned installer for SignPath
+        if: steps.signing.outputs.enabled == 'true'
+        id: unsigned-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer-${{ matrix.arch }}
+          path: release/*.exe
+          if-no-files-found: error
+      - name: Sign the installer
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: release-signed
+      - name: Use the signed installer
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: Move-Item -Force release-signed/*.exe release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: release/*.exe
+          if-no-files-found: error
+      # Microsoft Store: an .msix from the same (signed, if signing ran) app, only once the Partner Center identity is
+      # set (packaging/windows/STORE.md). Not a release file: the Store signs it on submission; upload it there.
+      - name: Store package configured?
+        id: store
+        shell: bash
+        env:
+          MS_STORE_IDENTITY_NAME: ${{ vars.MS_STORE_IDENTITY_NAME }}
+          MS_STORE_PUBLISHER: ${{ vars.MS_STORE_PUBLISHER }}
+          MS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MS_STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          if [ -n "$MS_STORE_IDENTITY_NAME" ] && [ -n "$MS_STORE_PUBLISHER" ] && [ -n "$MS_STORE_PUBLISHER_DISPLAY_NAME" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Microsoft Store package skipped: the MS_STORE_* variables aren't set (packaging/windows/STORE.md)."
+          fi
+      - name: Build the Store package (.msix)
+        if: steps.store.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          MS_STORE_IDENTITY_NAME: ${{ vars.MS_STORE_IDENTITY_NAME }}
+          MS_STORE_PUBLISHER: ${{ vars.MS_STORE_PUBLISHER }}
+          MS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MS_STORE_PUBLISHER_DISPLAY_NAME }}
+        run: >-
+          ./app/scripts/package-release-win.ps1 -Arch ${{ matrix.arch }} -Stage store
+          -Unpacked ${{ steps.signing.outputs.enabled == 'true' && 'app/dist/signed-unpacked' || format('app/dist/{0}', matrix.arch == 'x64' && 'win-unpacked' || 'win-arm64-unpacked') }}
+      - if: steps.store.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-${{ matrix.arch }}
+          path: release/*.msix
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-files-${{ inputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: windows-*
+          merge-multiple: true
+          path: release
+      - name: Upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: sh scripts/release-upload.sh "${{ inputs.tag }}" '\.exe$' release $(cd release && ls *.exe)
+      - name: Attest build provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*.exe
+
+  # winget: a pull request to microsoft/winget-pkgs for the new version (the package's first version went in by
+  # hand, packaging/winget/README.md). A rejected or pending update doesn't fail the release.
+  winget:
+    needs: publish
+    if: inputs.winget && github.event.repository.private == false
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: winget token configured?
+        id: check
+        shell: bash
+        run: |
+          if [ -n "$WINGET_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::winget not updated: WINGET_TOKEN isn't set (packaging/winget/README.md)."; fi
+      - if: steps.check.outputs.enabled == 'true'
+        uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: TheThirdSourcers.VisionCLI
+          installers-regex: 'windows-(x64|arm64)\.exe$'
+          release-tag: ${{ inputs.tag }}
+          token: ${{ secrets.WINGET_TOKEN }}
+
+  site:
+    needs: publish
+    if: inputs.site
+    permissions:
+      contents: write
+    uses: ./.github/workflows/site.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit

@@ -1,0 +1,35 @@
+name: CI macOS
+
+# The MCP server's tests, the macOS app's Swift tests and a compile of the app.
+# Runs on pull requests that touch these files, and by hand (Actions → CI macOS → Run workflow). Not on every push to
+# main: maintainers run the tests locally (README → Build and test), which keeps the Actions budget for releases.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "overlay/**"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - ".github/workflows/ci-mac.yml"
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - name: Swift unit tests
+        run: sh scripts/test-overlay.sh
+      - name: Compile the overlay app
+        run: VISIONCLI_NO_INSTALL=1 sh scripts/build-overlay.sh

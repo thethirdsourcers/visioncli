@@ -1,7 +1,7 @@
 # VisionCLI in the Snap Store
 
 `snapcraft.yaml` repackages the release's unpacked app (`VisionCLI-<version>-linux-{x64,arm64}.tar.gz`) on core24
-with **classic** confinement. The `snap` job in `.github/workflows/release.yml` builds it on an x64 and an arm64
+with **classic** confinement. The `snap` job in `.github/workflows/release-linux.yml` builds it on an x64 and an arm64
 runner and publishes it to the `stable` channel when the secret `SNAPCRAFT_STORE_CREDENTIALS` exists; without it the
 job prints a notice and stops.
 
