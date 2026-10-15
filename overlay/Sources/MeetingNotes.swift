@@ -31,6 +31,7 @@ final class MeetingNotes: ObservableObject {
     @Published private(set) var overview: String?
     @Published private(set) var finishing = false
     @Published var project = ""
+    @Published var engine = ""                       // the speech recognition in use, shown in the panel
     @Published private(set) var audio: URL? {       // the recording, once mixed (or of a past meeting)
         didSet { stopPlaying(); player = audio.flatMap { try? AVAudioPlayer(contentsOf: $0) }; player?.prepareToPlay() }
     }
@@ -63,7 +64,11 @@ final class MeetingNotes: ObservableObject {
     private var transcribing = false
     private var guestSpans: [(start: Date, end: Date)] = []
     private var guestLines: [(at: Date, text: String)] = []
-    private var micIsPaused = false             // written on main, read on the mic's queue: a stale read costs a frame
+    private var micIsPaused = false
+    // How much each source delivered (written on its queue, read for the log: approximate is fine).
+    private var heardSamples: [MeetingSpeaker: Int] = [:]
+    private var peak: [MeetingSpeaker: Double] = [:]
+    private var lastLevelLog = Date()             // written on main, read on the mic's queue: a stale read costs a frame
     private var replyGen: [Int: Int] = [:]      // turn id → the request whose replies count
     private var lookups: [(turn: Int, proc: Process?)] = []   // running, oldest first
     static let parallelLookups = 3
@@ -162,6 +167,7 @@ final class MeetingNotes: ObservableObject {
 
     private func systemSamples(_ samples: [Int16]) {
         guestTrack?.write(samples)
+        DispatchQueue.main.async { self.count(.guest, samples) }
         let out = systemSeg.feed(samples)
         let now = Date(), speaking = systemSeg.inSpeech
         DispatchQueue.main.async { [weak self] in
@@ -175,6 +181,7 @@ final class MeetingNotes: ObservableObject {
         // While you hold ⌥ you're talking to VisionCLI, not the meeting (the flag is refreshed on the main thread).
         if micIsPaused { micSeg.reset(); return }
         youTrack?.write(samples)
+        DispatchQueue.main.async { self.count(.you, samples) }
         let out = micSeg.feed(samples)
         let now = Date(), speaking = micSeg.inSpeech
         DispatchQueue.main.async { [weak self] in
@@ -240,8 +247,23 @@ final class MeetingNotes: ObservableObject {
         if let t = turns.open { show(t) }
     }
 
+    private func count(_ s: MeetingSpeaker, _ samples: [Int16]) {
+        heardSamples[s, default: 0] += samples.count
+        peak[s] = max(peak[s] ?? 0, Double(samples.map { abs(Int($0)) }.max() ?? 0) / 32768)
+    }
+
     private func tick() {
         micIsPaused = micPaused()
+        // Every 15 s: is audio arriving from each side, and how loud (a silent side is the first thing to check).
+        if isOn, Date().timeIntervalSince(lastLevelLog) >= 15 {
+            lastLevelLog = Date()
+            func line(_ s: MeetingSpeaker) -> String {
+                "\(s.rawValue) \(String(format: "%.1f", Double(heardSamples[s] ?? 0) / Double(SpeechSegmenter.rate)))s peak \(String(format: "%.3f", peak[s] ?? 0))"
+            }
+            log("meeting: audio in the last 15 s: \(line(.guest)), \(line(.you))")
+            heardSamples = [:]
+            peak = [:]
+        }
         guard isOn, let open = turns.open else { return }
         let talking = open.speaker == .guest ? guestSpeaking : youSpeaking
         let pending = transcribing || jobs.contains { $0.speaker == open.speaker }

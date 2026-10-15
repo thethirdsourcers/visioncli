@@ -1,4 +1,5 @@
 import AppKit
+import Speech
 
 // Meeting Notes: the menu toggle, the speech engine it uses, and the panel (see MeetingNotes and MeetingPanel).
 
@@ -58,10 +59,12 @@ extension AppDelegate {
             guard alert.runModal() == .alertFirstButtonReturn else { return }
             meetingConsented = true
         }
-        guard startMeetingEngine() else {
-            flash("Meeting Notes needs Parakeet or Whisper: Settings → Voice", seconds: 8)
+        guard let engine = startMeetingEngine() else {
+            flash("Meeting Notes needs speech recognition: install Parakeet or Whisper, or allow Apple's (Settings → Voice)", seconds: 8)
             return
         }
+        meeting.engine = engine
+        log("meeting: transcribing with \(engine)")
         meeting.claude = cfg.claude
         meeting.path = cfg.path
         meeting.project = project
@@ -119,17 +122,42 @@ extension AppDelegate {
         if open.runModal() == .OK, let url = open.url { meeting.project = url.path }
     }
 
-    /// The voice engine already running for questions, else one started just for the meeting (Parakeet first).
-    private func startMeetingEngine() -> Bool {
-        if parakeet != nil || whisper != nil { return true }
-        if ParakeetEngine.binary != nil {
-            meetingParakeet = ParakeetEngine()
-            meetingParakeet?.start()
-            return true
+    /// The engine picked in Settings → Voice. Wispr Flow only dictates live (it can't take recorded audio), so it,
+    /// like a missing engine, falls back to Parakeet, then Whisper, then Apple's recognizer. A running engine is
+    /// shared with voice questions; otherwise one is started for the meeting. Returns its name, or nil.
+    private func startMeetingEngine() -> String? {
+        let order: [String]
+        switch Settings.sttEngine {
+        case "parakeet": order = ["parakeet", "whisper", "apple"]
+        case "whisper": order = ["whisper", "parakeet", "apple"]
+        case "apple": order = ["apple", "parakeet", "whisper"]
+        default: order = ["parakeet", "whisper", "apple"]
         }
-        meetingWhisper = WhisperEngine(cfg: cfg, model: Settings.whisperModel)
-        meetingWhisper?.start()
-        return meetingWhisper != nil
+        for kind in order {
+            switch kind {
+            case "parakeet":
+                if parakeet == nil {
+                    guard ParakeetEngine.binary != nil else { continue }
+                    meetingParakeet = ParakeetEngine()
+                    meetingParakeet?.start()
+                }
+                meetingSTT = "parakeet"
+                return "Parakeet"
+            case "whisper":
+                if whisper == nil {
+                    guard let w = WhisperEngine(cfg: cfg, model: Settings.whisperModel) else { continue }
+                    meetingWhisper = w
+                    w.start()
+                }
+                meetingSTT = "whisper"
+                return "Whisper \((whisper ?? meetingWhisper)?.modelName ?? "")"
+            default:
+                guard SFSpeechRecognizer.authorizationStatus() == .authorized else { continue }
+                meetingSTT = "apple"
+                return "Apple speech recognition"
+            }
+        }
+        return nil
     }
 
     private func stopMeetingEngines() {
@@ -139,14 +167,42 @@ extension AppDelegate {
         meetingWhisper = nil
     }
 
-    /// A cold Parakeet can take a minute to load: what's heard meanwhile waits for it rather than being dropped.
+    /// A cold Parakeet or Whisper can take a minute to load: what's heard meanwhile waits rather than being dropped.
     private func transcribeMeeting(_ wav: URL, waited: Int = 0, _ done: @escaping (String?) -> Void) {
-        if let p = parakeet ?? meetingParakeet, p.ready { p.transcribe(wav, vocabulary: [], timeout: 15, done); return }
-        if let w = whisper ?? meetingWhisper, w.ready { w.transcribe(wav, prompt: "", timeout: 15, done); return }
+        switch meetingSTT {
+        case "apple":
+            AppleFileSpeech.transcribe(wav, locale: cfg.locale, done)
+            return
+        case "parakeet":
+            if let p = parakeet ?? meetingParakeet, p.ready { p.transcribe(wav, vocabulary: [], timeout: 15, done); return }
+        default:
+            if let w = whisper ?? meetingWhisper, w.ready { w.transcribe(wav, prompt: "", timeout: 15, done); return }
+        }
         guard waited < 90, meeting.isOn else { log("meeting: no speech engine ready"); done(nil); return }
-        if waited == 0 { log("meeting: waiting for the speech engine to load") }
+        if waited == 0 { log("meeting: waiting for \(meetingSTT) to load") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             self?.transcribeMeeting(wav, waited: waited + 1, done) ?? done(nil)
+        }
+    }
+}
+
+/// Apple's recognizer on a recorded file, on this Mac when the language supports it.
+enum AppleFileSpeech {
+    private static var recognizers: [String: SFSpeechRecognizer] = [:] // kept alive while their tasks run
+
+    static func transcribe(_ wav: URL, locale: String?, _ done: @escaping (String?) -> Void) {
+        let key = locale ?? ""
+        let r = recognizers[key] ?? (locale.map { SFSpeechRecognizer(locale: Locale(identifier: $0)) } ?? SFSpeechRecognizer())
+        guard let r, r.isAvailable else { done(nil); return }
+        recognizers[key] = r
+        let req = SFSpeechURLRecognitionRequest(url: wav)
+        req.shouldReportPartialResults = false
+        if r.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+        var finished = false
+        r.recognitionTask(with: req) { result, error in
+            guard !finished else { return }
+            if let result, result.isFinal { finished = true; done(result.bestTranscription.formattedString) }
+            else if error != nil { finished = true; done(nil) }
         }
     }
 }

@@ -119,7 +119,7 @@ export async function startVoice(cwd: string): Promise<string> {
   await run("/bin/launchctl", ["kickstart", "-k", `${domain}/${LABEL}`]);
 
   return (
-    `Voice mode is on (default project ${resolve(cwd)}; it follows the project of the window under your pointer). Hold Option, ask your question, then let go (Option+Command to include a screenshot). ` +
+    `Voice mode is on (pick the project from the menu bar icon → Project; the first time it is ${resolve(cwd)}). Hold Option, ask your question, then let go (Option+Command to include a screenshot). ` +
     `The answer appears above your mouse pointer (Esc dismisses it). The eye icon in the menu bar has Quit. ` +
     `The first time, macOS asks for Microphone and Speech Recognition access. VisionCLI also needs ` +
     `Screen Recording permission (System Settings → Privacy & Security).`

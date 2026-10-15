@@ -60,7 +60,7 @@ struct MeetingView: View {
                         if let overview = notes.overview { OverviewCard(text: overview).id("top") }
                         else if notes.finishing { HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Writing the meeting summary…").font(.system(size: 12)).foregroundStyle(.secondary) } }
                         if notes.rows.isEmpty && notes.isOn {
-                            Text("Listening… What your colleagues say (your Mac's sound) shows on the left, what you say (the microphone) on the right.")
+                            Text("Listening… What your colleagues say (your Mac's sound) shows on the left, what you say (the microphone) on the right.\(notes.engine.isEmpty ? "" : "\nTranscribing with \(notes.engine).")")
                                 .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 30).frame(maxWidth: .infinity)
                                 .multilineTextAlignment(.center)
                         }
@@ -106,6 +106,9 @@ struct MeetingView: View {
             }
             .menuStyle(.borderlessButton).fixedSize()
             .help("Code questions are looked up in this project")
+            if notes.isOn && !notes.engine.isEmpty {
+                Image(systemName: "waveform").font(.system(size: 11)).foregroundStyle(.secondary).help("Transcribing with \(notes.engine)")
+            }
             Spacer()
             Button { follow.toggle() } label: { Image(systemName: follow ? "arrow.down.to.line.compact" : "pause") }
                 .buttonStyle(.borderless).help(follow ? "Following the conversation" : "Not scrolling")

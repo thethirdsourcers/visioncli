@@ -5,7 +5,6 @@ export const ControlAction = {
   status: "status",
   displays: "displays",
   announce: "announce",
-  autopilotCheck: "autopilot_check",
   capture: "capture",
   elements: "elements",
   click: "click",
@@ -27,7 +26,7 @@ export const isControlAction = (a: string): a is ControlActionName => (CONTROL_A
 export const usesKeyboard = (a: string) => a === "type" || a === "key";
 
 /** Answered right away, no approval, and they work even when control is off. */
-export const READ_ONLY: ReadonlySet<string> = new Set(["announce", "status", "displays", "autopilot_check", "capture", "elements"]);
+export const READ_ONLY: ReadonlySet<string> = new Set(["announce", "status", "displays", "capture", "elements"]);
 
 /**
  * Apps where every action asks first, even with "Allow all": settings, password managers, keyrings and polkit/sudo

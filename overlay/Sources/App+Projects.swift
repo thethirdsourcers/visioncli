@@ -21,10 +21,11 @@ extension AppDelegate {
     }
 
     @objc func pickProject(_ sender: NSMenuItem) {
-        Settings.pinnedProject = sender.representedObject as? String
-        if let p = Settings.pinnedProject { currentProject = p }
+        guard let p = sender.representedObject as? String else { return }
+        Settings.pinnedProject = p
+        currentProject = p
         updateStatusTitle()
-        log("project: \(Settings.pinnedProject ?? "auto")")
+        log("project: \(p)")
     }
 
     @objc func chooseProjectFolder() {

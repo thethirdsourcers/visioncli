@@ -177,10 +177,6 @@ export function createControlServer(deps: ControlDeps): ControlServer {
         }
         return out;
       }
-      case "autopilot_check":
-        if (!deps.autopilot?.enabled()) return { error: "Autopilot is off" };
-        deps.autopilot.checkNow();
-        return { ok: true };
       case "capture": {
         // A window by id, or x/y/width/height (e.g. a whole display).
         const windowId = num("window_id");

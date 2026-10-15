@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     let meetingLauncher = MeetingLauncher()
     var meetingParakeet: ParakeetEngine? // started for Meeting Notes when no voice engine runs
     var meetingWhisper: WhisperEngine?
+    var meetingSTT = ""                  // the engine transcribing the meeting: parakeet | whisper | apple
     var meetingConsented = false         // asked once per launch; Meeting Notes itself is never remembered
     let mascot = Mascot()
     let setupWizard = SetupWizard()
@@ -97,8 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
         currentProject = ""
         super.init()
         HomeProject.ensure()
-        // Until a project shows up under the pointer, questions go to Home (a launch folder that is a project wins).
-        currentProject = cfg.cwd == home.path ? HomeProject.path : cfg.cwd
+        // The project is picked by hand (Project menu); the first time, the launch folder (or Home) is it.
+        if Settings.pinnedProject == nil { Settings.pinnedProject = cfg.cwd == home.path ? HomeProject.path : cfg.cwd }
+        currentProject = Settings.pinnedProject ?? HomeProject.path
     }
 
     /// The last real project questions went to, and when: a question asked away from any project window shortly after

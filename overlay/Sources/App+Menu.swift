@@ -41,10 +41,9 @@ extension AppDelegate {
             m.addItem(i)
         }
 
-        // Project: Auto, or pick one (candidates refreshed in the background each time the menu opens)
+        // Project: picked by hand (candidates refreshed in the background each time the menu opens)
         refreshCandidates()
-        submenu("Project: \(HomeProject.label(currentProject))\(Settings.pinnedProject != nil ? " (pinned)" : "")", in: menu) { m in
-            item("Auto: follow the window under the pointer", #selector(pickProject(_:)), in: m, on: Settings.pinnedProject == nil)
+        submenu("Project: \(HomeProject.label(currentProject))", in: menu) { m in
             item("Home: general questions, no project", #selector(pickProject(_:)), in: m,
                  on: Settings.pinnedProject == HomeProject.path, value: HomeProject.path)
             m.addItem(.separator())

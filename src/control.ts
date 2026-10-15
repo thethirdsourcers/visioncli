@@ -41,7 +41,6 @@ export interface ControlRequests {
   status: {};
   displays: { windows?: boolean };
   announce: { text: string };
-  autopilot_check: {};
   capture: { window_id: number } | Rect; // a window, or an area in top-left points (e.g. a whole display)
   elements: { app?: string };
   click: { element?: number; x?: number; y?: number; button?: "left" | "right"; count?: number };
@@ -67,7 +66,6 @@ export interface ControlResponses {
   status: { trusted: boolean; mode: string; frontApp: string; stopped: boolean };
   displays: { displays: Rect[]; pointer?: Point; windows?: AppWindow[] };
   announce: { ok: true };
-  autopilot_check: { ok: true };
   capture: { data?: string; width?: number; height?: number };
   elements: { app: string; elements: UIElement[] };
   click: ActionDone;
@@ -89,7 +87,6 @@ const TIMEOUTS: Record<ControlAction, number> = {
   announce: 3000,
   capture: 5000,
   elements: 8000,
-  autopilot_check: APPROVAL_TIMEOUT,
   click: APPROVAL_TIMEOUT,
   type: APPROVAL_TIMEOUT,
   key: APPROVAL_TIMEOUT,

@@ -57,6 +57,21 @@ enum AudioDevices {
 
     static func device(uid: String) -> AudioDevice? { all().first { $0.uid == uid } }
 
+    private static func transport(_ id: AudioDeviceID) -> UInt32 {
+        var addr = address(kAudioDevicePropertyTransportType)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value) == noErr ? value : 0
+    }
+
+    /// A Bluetooth headset: opening its microphone switches it to the low-quality call profile.
+    static func isBluetooth(_ d: AudioDevice) -> Bool {
+        [kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE].contains(transport(d.id))
+    }
+
+    /// The Mac's own microphone, if it has one.
+    static var builtInInput: AudioDevice? { inputs.first { transport($0.id) == kAudioDeviceTransportTypeBuiltIn } }
+
     private static func string(_ id: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> String? {
         var addr = address(selector)
         var value: Unmanaged<CFString>?
