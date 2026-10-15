@@ -67,7 +67,8 @@ Each macOS piece maps to Linux as follows.
 | UI elements / AXPress / set value (AXUIElement) | AT-SPI2 over D-Bus (GTK, Qt, Chromium, Electron, LibreOffice): same roles, labels and actions |
 | Sensitive targets always ask | AT-SPI `password text` role + a list of password managers / settings apps |
 | Open app / URL / focus app | `.desktop` files + `gtk-launch` / `xdg-open`; focus via the window backend |
-| Task panel, Autopilot, announcements | Same features in Electron windows; Autopilot reads window text through AT-SPI |
+| Task panel, announcements | Same features in Electron windows |
+| Meeting Notes (`MeetingNotes`, `MeetingPanel`, `MeetingLauncher`; ScreenCaptureKit audio + AVAudioEngine) | The default output's monitor (`parecord … --device=<sink>.monitor`, or PipeWire's `stream.capture.sink`) and the microphone (`pw-record` / `parecord` / `arecord`), segmented and transcribed the same way; the panel and the Shift+Alt+Super+R card are Electron windows (the shortcut needs X11 or a desktop that lets Electron register global shortcuts). Recordings are AAC through `ffmpeg` when it's installed, else WAV |
 | Crash detection (DiagnosticReports) | `coredumpctl` / systemd-coredump journal, plus `/var/crash` (Apport) |
 | Own crash reporter and relaunch-loop guard | Electron `crashReporter` + the same marker files; systemd `Restart=on-failure` with `StartLimitBurst` |
 | History, usage, projects, settings (all tabs), setup wizard | Same screens. JetBrains/VS Code recents are read from `~/.config`. The setup wizard checks the `input` group, portals and PipeWire |

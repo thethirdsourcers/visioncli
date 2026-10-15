@@ -1,0 +1,27 @@
+/* The Meeting Notes launcher card (MeetingLauncher.swift). */
+#root { display: inline-block; padding: 6px; }
+.card { width: 380px; padding: 18px; border-radius: 16px; background: var(--fill); box-shadow: inset 0 0 0 1px var(--stroke); display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; gap: 12px; align-items: center; }
+.rec { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,69,58,0.18); display: flex; align-items: center; justify-content: center; flex: none; }
+.rec span { width: 16px; height: 16px; border-radius: 50%; background: var(--red); }
+.title { font-size: 17px; font-weight: 600; }
+.sub { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 2px; line-height: 1.35; }
+.mono { font-variant-numeric: tabular-nums; }
+.switches { display: flex; flex-direction: column; gap: 8px; }
+.sw { display: flex; align-items: center; gap: 9px; font-size: 12.5px; cursor: pointer; }
+.sw input { display: none; }
+.track { width: 26px; height: 15px; border-radius: 999px; background: rgba(255,255,255,0.2); position: relative; flex: none; transition: background 0.15s; }
+.knob { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: left 0.15s; }
+.sw input:checked + .track { background: var(--green); }
+.sw input:checked + .track .knob { left: 13px; }
+.project { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.link { color: #fff; padding: 2px 6px; border-radius: 6px; }
+.link:hover { background: rgba(255,255,255,0.1); }
+.muted { color: rgba(255,255,255,0.5); font-size: 11px; }
+.note { font-size: 10.5px; color: rgba(255,255,255,0.4); line-height: 1.35; }
+.foot { display: flex; align-items: center; gap: 8px; }
+.hint { font-size: 10.5px; color: rgba(255,255,255,0.4); }
+.spacer { flex: 1; }
+.btn { font-size: 12.5px; padding: 5px 14px; border-radius: 7px; background: rgba(255,255,255,0.14); }
+.btn:hover { background: rgba(255,255,255,0.22); }
+.btn.primary { background: var(--blue); font-weight: 600; }

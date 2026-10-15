@@ -36,7 +36,6 @@ App.prototype.startComputerControl = async function (this: App) {
     approve: (card, signal) => this.approveControl(card, signal),
     assistantName: () => (settings.get("assistant") === "claude" ? "Claude" : "Gemini"),
     announce: (text) => this.announcer.announce(text),
-    autopilot: { enabled: () => settings.get("autopilot"), checkNow: () => void this.autopilot.checkNow() },
     tasks: this.tasks,
     onStatus: (text) => this.showControlStatus(text),
     onActivity: (text) => this.ui.badge(text, { icon: "camera" }),

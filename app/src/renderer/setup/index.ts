@@ -120,7 +120,7 @@ function page(): Child {
     case "keyboard":
       return [header("Keyboard Access", WINDOWS ? "Lets VisionCLI notice when you hold Alt, in every app." : "Lets VisionCLI notice when you hold Alt, on X11 and Wayland. Linux lets only members of the input group read the keyboard."), permission("keyboard")];
     case "screen":
-      return [header("Screen Capture", "Lets VisionCLI see the window you're asking about. It only looks when you ask, or when Autopilot is on."), permission("screen")];
+      return [header("Screen Capture", "Lets VisionCLI see the window you're asking about. It only looks when you ask."), permission("screen")];
     case "control":
       return [header("Computer Control", "Lets VisionCLI click and type for you when you ask it to, and find buttons and fields through accessibility (AT-SPI)."), permission("control")];
     case "terminal":

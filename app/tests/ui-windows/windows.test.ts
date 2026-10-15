@@ -84,7 +84,7 @@ test("menu has the macOS items in order", () => {
   ]);
   const bubble = buildMenu(model({ terminalMode: false, updateAvailable: "0.9.0", screenProblem: "Set Up Screen Capture…", pinnedProject: "/home/u/code/app" }));
   const l = labels(bubble);
-  assert.equal(l[0], "Project: app (pinned)");
+  assert.equal(l[0], "Project: app");
   assert.ok(l.includes("Install Update (0.9.0)…"));
   assert.ok(l.includes("Set Up Screen Capture…"));
   assert.ok(l.includes("Show Live Activity in Terminal"));
@@ -106,19 +106,18 @@ test("Gemini: Antigravity's limits under Gemini Usage, other model groups in the
   assert.match(tooltip(m), /Gemini usage: 1% of this 5-hour session/);
 });
 
-test("project submenu: Auto, Home, candidates once each, Choose Folder", () => {
+test("project submenu: picked by hand (no Auto), Home, candidates once each, Choose Folder", () => {
   const sub = buildMenu(model({ pinnedProject: "/home/u/code/web" }))[0].submenu!;
   const l = labels(sub);
-  assert.equal(l[0], "Auto: follow the window under the pointer");
-  assert.equal(l[1], "Home: general questions, no project");
-  assert.match(l[2]!, /^app   claude running · /);
-  assert.match(l[3]!, /^web   open · /);
-  assert.match(l[4]!, /^old   recent · /);
-  assert.equal(l.length, 6);
-  assert.equal(l[5], "Choose Folder…");
+  assert.equal(l[0], "Home: general questions, no project");
+  assert.match(l[1]!, /^app   claude running · /);
+  assert.match(l[2]!, /^web   open · /);
+  assert.match(l[3]!, /^old   recent · /);
+  assert.equal(l.length, 5);
+  assert.equal(l[4], "Choose Folder…");
   assert.equal(sub[0].checked, false);
   assert.equal(sub.find((i) => i.arg === "/home/u/code/web")!.checked, true);
-  assert.equal(sub[0].arg, null);
+  assert.ok(!sub.some((i) => i.id === "pickProject" && i.arg === null), "no Auto item");
   const empty = labels(buildMenu(model({ running: [], windows: [], recent: [] }))[0].submenu!);
   assert.ok(empty.includes("No projects found yet"));
 });

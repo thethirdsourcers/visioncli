@@ -47,6 +47,8 @@ namespace VcliWin
 
             Hooks.Emit = Event;
             Audio.OnLevel = l => Event("level", Json.O("level", Math.Round(l, 3)));
+            Loopback.OnPcm = b => Event("loopback", Json.O("data", Convert.ToBase64String(b)));
+            MicStream.OnPcm = b => Event("mic", Json.O("data", Convert.ToBase64String(b)));
 
             var stdin = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
             string line;
@@ -56,7 +58,7 @@ namespace VcliWin
                 Dispatch(line);
             }
             // stdin closed: the app quit or crashed. Process exit removes the hooks and stops waveIn.
-            try { Audio.Cancel(); } catch { }
+            try { Audio.Cancel(); Loopback.Stop(); MicStream.Stop(); } catch { }
             return 0;
         }
 
@@ -163,6 +165,10 @@ namespace VcliWin
                 case "record.snapshot": return Audio.Snapshot(a.Need("file"));
                 case "record.stop": return Audio.Stop();
                 case "record.cancel": return Audio.Cancel();
+                case "loopback.start": return Loopback.Start();
+                case "loopback.stop": return Loopback.Stop();
+                case "micstream.start": return MicStream.Start(a.Str("device"));
+                case "micstream.stop": return MicStream.Stop();
                 case "play": return Audio.Play(a.Need("file"), a.Str("device"), a.Str("token"));
                 case "play.stop": return Audio.StopPlay(a.Str("token"));
 

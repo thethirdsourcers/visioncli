@@ -242,6 +242,34 @@ namespace VcliWin
                 return "stopped after " + sw.ElapsedMilliseconds + " ms";
             });
 
+            Check("loopback", () =>
+            {
+                var devs = Obj(Call("audioDevices"));
+                if (Arr(devs["outputs"]).Count == 0) throw new Skip("no audio output");
+                int bytes = 0;
+                Loopback.OnPcm = b => Interlocked.Add(ref bytes, b.Length);
+                try { Call("loopback.start"); }
+                catch (Exception e) when (e.Message.Contains("no audio output")) { throw new Skip("no audio endpoint"); }
+                Thread.Sleep(700);
+                Call("loopback.stop");
+                // Silence still arrives (padded): ~0.7 s of 16 kHz 16-bit.
+                Assert(bytes >= 16000, "~32 KB of PCM in 0.7 s, got " + bytes);
+                return bytes + " bytes";
+            });
+
+            Check("micstream", () =>
+            {
+                var devs = Obj(Call("audioDevices"));
+                if (Arr(devs["inputs"]).Count == 0) throw new Skip("no microphone");
+                int bytes = 0;
+                MicStream.OnPcm = b => Interlocked.Add(ref bytes, b.Length);
+                Call("micstream.start", "device", null);
+                Thread.Sleep(700);
+                Call("micstream.stop");
+                Assert(bytes >= 12000, "PCM from the microphone in 0.7 s, got " + bytes);
+                return bytes + " bytes";
+            });
+
             Notepad();
 
             try { Directory.Delete(dir, true); } catch { }

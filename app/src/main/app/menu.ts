@@ -16,7 +16,7 @@ declare module "./core" {
     menuModel(): MenuModel;
     onMenu(id: MenuId, arg?: string | null): void;
     refreshCandidates(): Promise<void>;
-    pickProject(path: string | null): void;
+    pickProject(path: string): void;
     chooseProjectFolder(): Promise<void>;
     copyLastAnswer(): void;
     installUpdate(): Promise<void>;
@@ -70,7 +70,7 @@ App.prototype.menuModel = function (this: App): MenuModel {
 App.prototype.onMenu = function (this: App, id: MenuId, arg?: string | null) {
   log(`menu: ${id}${arg ? " " + arg : ""}`);
   switch (id) {
-    case "pickProject": this.pickProject(arg ?? null); break;
+    case "pickProject": if (arg) this.pickProject(arg); break;
     case "chooseFolder": void this.chooseProjectFolder(); break;
     case "refreshUsage":
       if (settings.get("assistant") !== "claude") { if (this.cfg.agy) void this.agyUsage.refresh(this.cfg.agy, { ...process.env, PATH: this.cfg.path }); }
@@ -103,10 +103,11 @@ App.prototype.refreshCandidates = async function (this: App) {
   this.screenProblem = await this.desktop.problem().then((p) => (p ? "Set Up Screen Capture…" : null), () => null);
 };
 
-App.prototype.pickProject = function (this: App, path: string | null) {
+/** The project is picked by hand (there's no "follow the window" mode any more). */
+App.prototype.pickProject = function (this: App, path: string) {
   settings.set("pinnedProject", path);
-  if (path) this.currentProject = path;
-  log(`project: ${path ?? "auto"}`);
+  this.currentProject = path;
+  log(`project: ${path}`);
 };
 
 App.prototype.chooseProjectFolder = async function (this: App) {

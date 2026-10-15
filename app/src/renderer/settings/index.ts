@@ -12,7 +12,7 @@ const SECTIONS: { id: SettingsSection; title: string; subtitle: string; icon: st
   { id: "assistant", title: "Assistant", subtitle: "Which AI answers your voice questions, where answers appear, and how hard it thinks.", icon: "sparkles", tint: "#af52de" },
   { id: "voice", title: "Voice", subtitle: "How your voice becomes text, and how answers are read back to you.", icon: "waveform", tint: "#ff2d55" },
   { id: "control", title: "Computer Control", subtitle: "Let the assistant click and type for you, with your approval.", icon: "cursor", tint: "#007aff" },
-  { id: "autopilot", title: "Autopilot", subtitle: "Suggestions while you work, only in the apps you choose.", icon: "wand", tint: "#ff9500" },
+  { id: "meetings", title: "Meeting Notes", subtitle: "Notes, summaries and suggested replies in your meetings, with a recording to play back.", icon: "people", tint: "#ff9500" },
   { id: "integrations", title: "Integrations", subtitle: "Connect VisionCLI's tools (look, click, browser…) to your AI command-line tools.", icon: "puzzle", tint: "#34c759" },
   { id: "advanced", title: "Advanced", subtitle: "Permissions, logs and files.", icon: "wrench", tint: "#737373" },
 ];
@@ -182,7 +182,7 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
     const access = windows ? [
       row("Keyboard access", s.keyboardAccess ? "Notices when you hold Alt (and Win for a screenshot)." : s.keyboardProblem ?? "VisionCLI's helper isn't running.",
         s.keyboardAccess ? allowed() : button("Try Again", () => act("grantKeyboardAccess"))),
-      row("UI Automation", "Lets the assistant find buttons and fields in apps, and Autopilot read the front window.", s.atspi ? allowed("On") : allowed("Built in")),
+      row("UI Automation", "Lets the assistant find buttons and fields in apps.", s.atspi ? allowed("On") : allowed("Built in")),
       row("Clicking and typing", "Through Windows input (SendInput).", allowed()),
     ] : null;
     return [
@@ -195,7 +195,7 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
             : s.keyboardProblem ?? "Needed to notice when you hold Alt. Join the input group once, then log out and back in.",
           s.keyboardAccess && s.keyboardBackend !== "xinput2" ? allowed() : s.keyboardAccess ? [allowed("X11 only"), button("Join Input Group…", () => act("grantKeyboardAccess"))]
             : button("Join Input Group…", () => act("grantKeyboardAccess"))),
-        row("Accessibility (AT-SPI)", "Lets the assistant find buttons and fields in apps, and Autopilot read the front window.",
+        row("Accessibility (AT-SPI)", "Lets the assistant find buttons and fields in apps.",
           s.atspi ? allowed("On") : button("Turn On", () => act("enableAtspi"))),
         row("Clicking and typing", s.inputBackend ? `Through ${INPUT_NAMES[s.inputBackend] ?? s.inputBackend}.` : "Needed to click and type for you. On Wayland your desktop asks once to allow remote control.",
           s.inputBackend ? allowed() : button("Set Up…", () => act("setupInput"))),
@@ -210,19 +210,33 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
     ];
   },
 
-  autopilot: (s) => [
-    card(null, null, [
-      switchRow("Autopilot", "While you work in the apps below, VisionCLI reads the front window and suggests what to do next, using Claude Haiku. Nothing is sent for you.",
-        s.autopilot, (on) => { if (on !== s.autopilot) void act("toggleAutopilot"); else render(); }),
-      row("Checks this hour", `${s.autopilotCalls} of at most ${s.autopilotCap}, about 1k tokens each.`, button("Check Now", () => act("autopilotCheckNow"), { disabled: !s.autopilot })),
-    ]),
-    card("Apps it may read", "Every other app is never read. Password fields, password managers and system settings are always skipped.", [
-      !s.autopilotChoices.length && h("p.note", { style: { padding: "8px 0" } }, "Open the apps you want help with, and they appear here."),
-      ...s.autopilotChoices.map((a) => h("label.checkbox-row", null,
-        h("input", { type: "checkbox", checked: s.autopilotApps.includes(a.id), onchange: (e: Event) => act("setAutopilotApp", { id: a.id, on: (e.target as HTMLInputElement).checked }) }),
-        a.name)),
-    ]),
-  ],
+  meetings: (s) => {
+    const opt = (key: SettingsActions["setMeetingOption"]["key"]) => (on: boolean) => act("setMeetingOption", { key, on });
+    return [
+      card(null, null, [
+        switchRow("Meeting Notes", `Listens to your computer's sound (your colleagues) and your microphone (you), transcribes both on this computer and shows the conversation in a panel. Start it anywhere with ${s.meetingShortcut}. Off each time VisionCLI starts.`,
+          s.meetingNotes, (on) => { if (on !== s.meetingNotes) void act("toggleMeeting"); else render(); }),
+        s.meetingNotes && row("Listening now", "The panel shows the conversation, summaries and replies.", button("Show Panel", () => act("showMeetingPanel"))),
+      ]),
+      card("During a meeting", "Summaries, replies and code answers use Claude under your own account: the transcript text is sent, never the audio.", [
+        switchRow("Summarize what colleagues say", "A one-line summary under each of their turns (Claude Haiku).", s.meetingSummarizeGuest, opt("meetingSummarizeGuest")),
+        switchRow("Summarize what you say", "A summary under your own turns too. Your words are always in the notes and the meeting summary.", s.meetingSummarizeYou, opt("meetingSummarizeYou")),
+        switchRow("Suggest replies", "When a colleague asks you something, three short replies appear once they've finished talking. Click to copy; nothing is sent.", s.meetingReplies, opt("meetingReplies")),
+        switchRow("Answer code questions from the project", "Questions like \"which endpoint handles refunds?\" are looked up in the project's code (read-only) and answered with file:line.", s.meetingCodeLookup, opt("meetingCodeLookup")),
+        switchRow("Record the meeting", "Keeps a recording of both sides on this computer, to play back with the transcript.", s.meetingRecord, opt("meetingRecord")),
+      ]),
+      card("Past meetings", "Each meeting is saved with its notes, the summary and the recording, in VisionCLI's meetings folder.", [
+        !s.pastMeetings.length && h("p.note", { style: { padding: "8px 0" } }, "None yet."),
+        ...s.pastMeetings.map((m) => row(m.name, null, button("Open", () => act("openMeeting", m.id), { disabled: s.meetingNotes }))),
+        row("All meetings", null, button("Show in Folder", () => act("openMeetings"))),
+      ]),
+      card("Privacy", null, [
+        switchRow("Hide VisionCLI from screen sharing and recordings",
+          s.canHideFromCapture ? "The Meeting Notes panel, bubble, badge, Visi and VisionCLI's windows are left out when you share or record your screen. Some capture apps may still show them." : "Not supported on Linux.",
+          s.canHideFromCapture && s.hideFromCapture, (on) => act("setHideFromCapture", on), !s.canHideFromCapture),
+      ]),
+    ];
+  },
 
   integrations: (s) => {
     const integration = (a: AssistantId, install: string) => {

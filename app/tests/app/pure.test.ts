@@ -1,5 +1,5 @@
 // The orchestrator's pure parts: launch config, shot geometry, question text, overlay keys, task panel, keyboard
-// delivery's window lookup, Autopilot's app list.
+// delivery's window lookup.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "node:fs";
@@ -12,7 +12,6 @@ import { OverlayKeys } from "../../src/main/app/keys";
 import { idleUnload } from "../../src/main/app/voice";
 import { TaskModel } from "../../src/main/app/tasks";
 import { ancestorPids, emulatorWindow } from "../../src/main/app/keyboard";
-import { appChoices } from "../../src/main/app/choices";
 import { cardPreview } from "../../src/main/app/control";
 import { Markup } from "../../src/main/core/markup";
 import type { DesktopWindow } from "../../src/main/contracts";
@@ -162,10 +161,7 @@ test("keyboard delivery finds the emulator window above the CLI", () => {
   assert.equal(emulatorWindow(wins, [9]), null);
 });
 
-test("Autopilot app choices and the control card preview", () => {
-  const wins = [win("1", "Firefox", "", 0, 0, 1, 1, 7, "firefox"), win("2", "kitty", "", 0, 0, 1, 1, 8), win("3", "KeePassXC", "", 0, 0, 1, 1, 9, "keepassxc"),
-    win("4", "Firefox", "x", 0, 0, 1, 1, 7, "firefox"), win("5", "gedit", "", 0, 0, 1, 1, 10, "org.gnome.gedit")];
-  assert.deepEqual(appChoices(wins, ["slack"], 1), [{ id: "firefox", name: "Firefox" }, { id: "org.gnome.gedit", name: "gedit" }, { id: "slack", name: "slack" }]);
+test("the control card preview", () => {
   assert.equal(cardPreview({ detail: [{ text: "hello", kind: "added" }, { text: "Sensitive", kind: "removed" }, { text: "Esc stops", kind: "context" }] }),
     "+ hello\n- Sensitive\n  Esc stops");
 });

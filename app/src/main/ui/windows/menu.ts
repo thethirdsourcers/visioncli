@@ -72,9 +72,8 @@ export function buildMenu(m: MenuModel, now = new Date()): MItem[] {
   const items: MItem[] = [];
   const pinned = m.pinnedProject;
 
-  // Project: Auto, Home, then candidates (running CLIs, open editor windows, recents), Choose Folder…
+  // Project, picked by hand: Home, then candidates (running CLIs, open editor windows, recents), Choose Folder…
   const projects: MItem[] = [
-    { id: "pickProject", arg: null, label: "Auto: follow the window under the pointer", type: "checkbox", checked: pinned === null },
     { id: "pickProject", arg: m.homeProject, label: "Home: general questions, no project", type: "checkbox", checked: pinned === m.homeProject },
     sep,
   ];
@@ -93,7 +92,7 @@ export function buildMenu(m: MenuModel, now = new Date()): MItem[] {
   for (const p of m.recent) add(p, "recent · ");
   if (!added) projects.push({ label: "No projects found yet", enabled: false });
   projects.push(sep, { id: "chooseFolder", label: "Choose Folder…" });
-  items.push({ label: `Project: ${projectLabel(m.currentProject, m.homeProject)}${pinned !== null ? " (pinned)" : ""}`, submenu: projects });
+  items.push({ label: `Project: ${projectLabel(m.currentProject, m.homeProject)}`, submenu: projects });
 
   items.push(usageItem(m, now));
   if (m.updateStatus) items.push({ label: m.updateStatus, enabled: false });

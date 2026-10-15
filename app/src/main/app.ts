@@ -1,17 +1,18 @@
-import { app as electron, dialog, globalShortcut, screen, shell } from "electron";
+import { BrowserWindow, app as electron, dialog, globalShortcut, screen, shell } from "electron";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { AgySetup, createSessions } from "./assistant";
-import { createAudioDevices, createRecorder } from "./audio";
+import { createAudioDevices, createMicStream, createRecorder, createSystemAudio, meetingMic } from "./audio";
 import type { DesktopWindow } from "./contracts";
 import { Markup } from "./core/markup";
 import { createAccessibility } from "./desktop/atspi";
 import { createApps } from "./desktop/apps";
 import { createInjector } from "./desktop/input";
 import { createDesktop } from "./desktop/windows";
-import { Autopilot } from "./features/autopilot";
+import { MeetingNotes } from "./features/meeting/notes";
+import { recoverRecordings } from "./features/meeting/recording";
 import { Autostart, launchCommand } from "./features/autostart";
 import type { CrashReporter } from "./features/crashreporter";
 import { CrashWatcher } from "./features/crashwatch";
@@ -26,15 +27,17 @@ import { settings } from "./settings";
 import { createSpeechEngines } from "./stt";
 import { setKeyboardDelivery } from "./terminal/mux";
 import { createSpeaker } from "./tts";
+import { createMeetingUI } from "./ui/meeting";
 import { createOverlayUI } from "./ui/overlay";
 import { createWindowsUI } from "./ui/windows";
+import { installContentProtection } from "./ui/windows/protection";
 import { loadConfig } from "./app/config";
 import { App } from "./app/core";
 import { createKeyboardDelivery } from "./app/keyboard";
 import { winHelper } from "./desktop/windows/win32";
 import { createWinKeyboardDelivery, useWinHelper } from "./terminal/win";
 import { OverlayKeys } from "./app/keys";
-import { parseOpenLink } from "./app/text";
+import { cleanTranscript, parseOpenLink } from "./app/text";
 // The feature files add their methods to App (like the App+*.swift extensions).
 import "./app/panel";
 import "./app/listening";
@@ -45,7 +48,7 @@ import "./app/browserTask";
 import "./app/announce";
 import "./app/menu";
 import "./app/settings";
-import { appChoices } from "./app/choices";
+import "./app/meeting";
 import "./app/setup";
 import "./app/voice";
 import "./app/control";
@@ -125,6 +128,13 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   });
 
   // ── The overlay and its keys ──
+  // Hide from screen sharing (Settings → Meeting Notes): every window, from its creation on.
+  installContentProtection({
+    onWindowCreated: (cb) => electron.on("browser-window-created", (_e, w) => cb(w)),
+    allWindows: () => BrowserWindow.getAllWindows(),
+    isOn: () => settings.get("hideFromCapture"),
+    onChange: (cb) => settings.on("change", (k: string) => { if (k === "hideFromCapture") cb(); }),
+  });
   a.ui = createOverlayUI({
     pointer: () => desktop.pointer(),
     motion: () => (a.hotkeys?.seesMotion ? a.hotkeys.lastMotion ?? 0 : null),
@@ -183,25 +193,39 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   });
   a.history.on("change", () => a.windows.refreshMenu());
 
-  // ── Computer control, crashes, Autopilot ──
+  // ── Computer control, crashes ──
   await a.startComputerControl();
   a.startCrashWatcher();
-  a.autopilot = new Autopilot({
-    desktop, ax: a.ax,
-    input: a.lazyInput,
-    card: {
-      show: (s) => {
-        void a.ui.suggestion.show({ title: s.title, detail: s.detail, draft: s.draft ?? undefined, app: s.app }).then((answer) => {
-          if (answer === "insert") void a.autopilot.insert(s);
-        });
-      },
-      hide: () => a.ui.suggestion.hide(),
+
+  // ── Meeting Notes: off at every launch (the shortcut's card, or Settings → Meeting Notes) ──
+  a.meetingUI = createMeetingUI();
+  a.meetingUI.onAction((act) => a.meetingAction(act));
+  a.meeting = new MeetingNotes({
+    system: createSystemAudio(),
+    // The mic picked in Settings → Voice, but not a Bluetooth headset when the computer has its own mic: opening a
+    // headset's mic for the whole meeting would keep its sound in the low-quality call profile.
+    mic: createMicStream(async () => {
+      const r = meetingMic(await a.audio.inputs().catch(() => []), settings.get("inputDevice"));
+      if (r.swappedFrom && r.device) log(`meeting: ${r.swappedFrom.name} is Bluetooth; using ${r.device.name} so the headphones keep their sound quality`);
+      if (r.device) log(`meeting: microphone ${r.device.name}`);
+      return r.device?.id ?? null;
+    }),
+    transcribe: async (wav) => {
+      a.voiceUsedAt = Date.now(); // keeps the engine loaded through the meeting
+      return a.engine ? cleanTranscript(await a.engine.transcribe(wav, [], false)) : "";
     },
-    isBusy: () => a.state.phase !== "idle",
-    claudePath: () => cfg.claude,
-    badge: (text, tint) => a.ui.badge(text, { icon: "sparkles", tint }),
+    micPaused: () => a.state.phase === "listening",
+    claude: cfg.claude, path: cfg.path,
   });
-  if (settings.get("autopilot")) a.autopilot.start();
+  a.meeting.on("change", () => a.pushMeeting());
+  void recoverRecordings();
+  const shortcuts = [a.meetingShortcut, "Control+Shift+Alt+R"];
+  for (const sc of shortcuts) {
+    let ok = false;
+    try { ok = globalShortcut.register(sc.replace("Win", "Super"), () => a.showMeetingLauncher()); } catch {}
+    if (ok) { a.meetingShortcut = sc.replace("Control", "Ctrl"); log(`meeting: shortcut ${a.meetingShortcut}`); break; }
+    log(`meeting: couldn't register ${sc}`);
+  }
 
   // ── Updates and model downloads ──
   a.updater = new Updater({ currentVersion: a.version, openUrl: (url) => void shell.openExternal(url), quit: () => a.quit() });
@@ -257,9 +281,7 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   // Cheap on Linux (/proc and the window list), so kept fresh for the tray menu, which can't ask when it opens.
   setInterval(() => void a.refreshCandidates().then(() => {
     a.windows.refreshMenu();
-    void desktop.windows().then((w) => { a.autopilotChoices = autopilotChoices(w); }, () => {});
   }), 30_000).unref();
-  void desktop.windows().then((w) => { a.autopilotChoices = autopilotChoices(w); }, () => {});
   void a.sessions.syncModelFromTerminal(a.currentProject).catch(() => {});
   void a.refreshProbe(true);
   a.sessions.setupAgy();
@@ -289,8 +311,6 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   a.runDebugFlags(o.argv);
   return a;
 }
-
-const autopilotChoices = (w: DesktopWindow[]) => appChoices(w, settings.get("autopilotApps"));
 
 /** A visioncli://open?path=…&line=… link from another process (a terminal, the browser) opens the file. */
 export function handleLink(a: App | null, url: string) {
@@ -323,8 +343,8 @@ App.prototype.shutdown = async function (this: App, crash: CrashReporter) {
   try { this.sessions?.closeAll(); } catch {}
   try { this.engine?.stop(); } catch {}
   try { this.speaker?.stop(); this.speaker?.kokoro.stop(); } catch {}
-  try { this.autopilot?.stop(); this.crashWatcher?.stop(); this.updater?.stop(); } catch {}
+  try { this.meeting?.stop(); this.crashWatcher?.stop(); this.updater?.stop(); } catch {}
   try { this.browseProc?.kill("SIGTERM"); } catch {}
   try { await this.control?.stop(); } catch {}
-  try { this.windows?.destroy(); this.ui?.destroy(); } catch {}
+  try { this.windows?.destroy(); this.ui?.destroy(); this.meetingUI?.destroy(); } catch {}
 };

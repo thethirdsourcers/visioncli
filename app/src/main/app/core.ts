@@ -6,7 +6,7 @@ import type {
 } from "../contracts";
 import type { ControlServer } from "../control";
 import type { AnnounceQueue } from "../features/announce";
-import type { Autopilot } from "../features/autopilot";
+import type { MeetingNotes } from "../features/meeting/notes";
 import type { Autostart } from "../features/autostart";
 import type { CrashReporter } from "../features/crashreporter";
 import type { CrashWatcher } from "../features/crashwatch";
@@ -16,7 +16,9 @@ import type { ModelInstaller } from "../features/installer";
 import type { ProjectResolver } from "../features/projects";
 import type { Updater } from "../features/updater";
 import type { AgyUsage, UsageTracker } from "../features/usage";
+import { settings } from "../settings";
 import type { LinuxSpeaker } from "../tts";
+import type { MeetingUI } from "../ui/meeting";
 import type { OverlayUI } from "../ui/overlay";
 import type { WindowsUI } from "../ui/windows";
 import type { AppConfig } from "./config";
@@ -51,7 +53,8 @@ export class App {
   agyUsage!: AgyUsage;
   projects!: ProjectResolver;
   crashWatcher!: CrashWatcher;
-  autopilot!: Autopilot;
+  meeting!: MeetingNotes;
+  meetingUI!: MeetingUI;
   updater!: Updater;
   installer!: ModelInstaller;
   autostart!: Autostart;
@@ -81,6 +84,8 @@ export class App {
   engine: SpeechEngine | null = null;
   /** Last time voice was used (key-down or speech): models unload after a while without it (app/voice.ts). */
   voiceUsedAt = Date.now();
+  /** Meeting Notes was confirmed once this launch (it's never remembered on). */
+  meetingConsented = false;
   hotkeyInfo: { backend: string; problem?: string } = { backend: "none" };
   hotkeysStarted = false;
 
@@ -142,8 +147,9 @@ export class App {
 
   constructor(readonly cfg: AppConfig) {
     HomeProject.ensure();
-    // Until a project shows up under the pointer, questions go to Home (a launch folder that is a project wins).
-    this._project = cfg.cwd === process.env.HOME ? HomeProject.path : cfg.cwd;
+    // The project is picked by hand (Project menu); the first time, the launch folder (or Home) is it.
+    if (!settings.get("pinnedProject")) settings.set("pinnedProject", cfg.cwd === process.env.HOME ? HomeProject.path : cfg.cwd);
+    this._project = settings.get("pinnedProject") ?? HomeProject.path;
     const raw: OverlayState = {
       phase: "idle", question: "", live: "", level: 0, status: "", raw: "", pinned: false, speaking: false, screenshot: false,
       toast: "", project: HomeProject.label(this._project), assistantName: "Claude",

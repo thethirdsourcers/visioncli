@@ -26,6 +26,18 @@ App.prototype.runDebugFlags = function (this: App, argv: string[]) {
   const say = arg("--say");
   if (say != null) after(4, () => this.speaker.feed(say, true, true));
 
+  // `--meeting-test [seconds]` starts Meeting Notes without the consent dialog (and stops it after `seconds`);
+  // `--meeting-launcher` shows the shortcut's card.
+  if (argv.includes("--meeting-test")) {
+    after(3, () => {
+      this.meetingConsented = true;
+      void this.startMeeting(settings.get("pinnedProject") ?? this.currentProject);
+      const s = Number(arg("--meeting-test"));
+      if (s > 0) after(3 + s, () => { if (this.meeting.isOn) void this.toggleMeeting(); });
+    });
+  }
+  if (argv.includes("--meeting-launcher")) after(3, () => this.showMeetingLauncher());
+
   // `--listen-test` records 2 s, three times in a row (the audio path without the hotkey).
   if (argv.includes("--listen-test")) {
     const round = (n: number) => {

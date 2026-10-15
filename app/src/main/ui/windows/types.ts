@@ -16,7 +16,7 @@ export interface UsageWindow { percent: number; resetsAt: string }  // percent a
 
 export interface MenuModel {
   currentProject: string;              // path; HOME_PROJECT for Home
-  pinnedProject: string | null;        // null = Auto
+  pinnedProject: string | null;        // the project picked by hand (null only before the first launch pinned one)
   homeProject: string;
   /** Project menu candidates, as refreshCandidates found them (the orchestrator refreshes them in the background). */
   running: { project: string; assistant: string }[];   // assistant = binary name ("claude", "agy")
@@ -45,7 +45,7 @@ export interface MenuModel {
 
 /** Menu item ids passed to bridge.onMenu. "history" and "settings" are handled by the windows module itself. */
 export type MenuId =
-  | "pickProject"            // arg: path, or null for Auto
+  | "pickProject"            // arg: path
   | "chooseFolder"
   | "refreshUsage" | "toggleUsageInMenuBar" | "toggleWeeklyInMenuBar"
   | "installUpdate"
@@ -65,6 +65,8 @@ export interface SettingsSnapshot {
   startAtLogin: boolean;
   autoUpdate: boolean;
   screenshotEvery: boolean;
+  hideFromCapture: boolean;
+  canHideFromCapture: boolean;         // false on Linux (no way to exclude a window from capture)
   version: string;
   updateAvailable: string | null;
   updateStatus: string | null;
@@ -114,12 +116,15 @@ export interface SettingsSnapshot {
   watchCrashes: boolean;
   ghostCursor: boolean;
   quickCommands: boolean;
-  // Autopilot
-  autopilot: boolean;
-  autopilotCalls: number;
-  autopilotCap: number;                // Autopilot.hourlyCap
-  autopilotApps: string[];
-  autopilotChoices: Item[];
+  // Meeting Notes
+  meetingNotes: boolean;               // running now (session-only)
+  meetingSummarizeGuest: boolean;
+  meetingSummarizeYou: boolean;
+  meetingReplies: boolean;
+  meetingCodeLookup: boolean;
+  meetingRecord: boolean;
+  meetingShortcut: string;             // "Shift+Alt+Super+R", or the fallback that could be registered
+  pastMeetings: Item[];                // the latest 10, id = folder
   // Integrations
   tools: Record<AssistantId, ToolsStatus>;
   // Advanced
@@ -134,6 +139,7 @@ export interface SettingsActions {
   // General
   setStartAtLogin: boolean;
   setScreenshotEvery: boolean;
+  setHideFromCapture: boolean;
   setAutoUpdate: boolean;
   checkForUpdates: undefined;
   installUpdate: undefined;
@@ -164,10 +170,12 @@ export interface SettingsActions {
   setWatchCrashes: boolean;
   setGhostCursor: boolean;
   setQuickCommands: boolean;
-  // Autopilot
-  toggleAutopilot: undefined;          // turning on asks for consent first
-  autopilotCheckNow: undefined;
-  setAutopilotApp: { id: string; on: boolean };
+  // Meeting Notes
+  toggleMeeting: undefined;            // starting asks for consent, once per launch
+  showMeetingPanel: undefined;
+  openMeeting: string;                 // a past meeting's folder
+  openMeetings: undefined;
+  setMeetingOption: { key: "meetingSummarizeGuest" | "meetingSummarizeYou" | "meetingReplies" | "meetingCodeLookup" | "meetingRecord"; on: boolean };
   // Integrations
   checkTools: undefined;               // re-check which CLIs have the tools (slow; updates `tools`)
   connectTools: AssistantId;
@@ -180,7 +188,7 @@ export interface SettingsActions {
 }
 export type SettingsActionName = keyof SettingsActions;
 
-export type SettingsSection = "general" | "assistant" | "voice" | "control" | "autopilot" | "integrations" | "advanced";
+export type SettingsSection = "general" | "assistant" | "voice" | "control" | "meetings" | "integrations" | "advanced";
 
 // ── Setup wizard (Setup.swift), Linux steps ─────────────────────────────────────────────────────────────────────
 

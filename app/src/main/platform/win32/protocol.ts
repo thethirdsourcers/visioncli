@@ -72,6 +72,12 @@ export interface Methods {
   /** Plays a WAV on `device` (null = default); resolves when done or stopped. */
   play: { params: { file: string; device: string | null; token: string }; result: true };
   "play.stop": { params: { token: string }; result: true };
+  /** What the speakers play (WASAPI loopback of the default output) as `loopback` events, 16 kHz mono s16 (Meeting Notes). */
+  "loopback.start": { params: {}; result: true };
+  "loopback.stop": { params: {}; result: true };
+  /** The microphone as `mic` events (16 kHz mono s16), alongside any record.start (Meeting Notes). */
+  "micstream.start": { params: { device: string | null }; result: true };
+  "micstream.stop": { params: {}; result: true };
 
   // ── Speech (SAPI 5 via System.Speech) ──
   voices: { params: {}; result: string[] };
@@ -91,6 +97,10 @@ export interface Events {
   button: { button: "left" | "right" | "middle" | "x1" | "x2"; down: boolean };
   motion: { x: number; y: number };     // throttled to ~60/s
   level: { level: number };
+  /** ~100 ms of loopback PCM (base64, 16 kHz mono s16); silence is padded in while nothing plays. */
+  loopback: { data: string };
+  /** ~100 ms of microphone PCM from micstream.start (base64, 16 kHz mono s16). */
+  mic: { data: string };
 }
 
 export type Event = keyof Events;

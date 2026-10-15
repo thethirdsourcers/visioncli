@@ -8,7 +8,7 @@ import type { Rect } from "../../contracts";
 import { log } from "../../log";
 
 export interface OverlayWindowOptions {
-  page: "bubble" | "mascot" | "marks" | "region" | "badge" | "hud" | "suggestion";
+  page: "bubble" | "mascot" | "marks" | "region" | "badge" | "hud";
   query?: Record<string, string>;
   /** Region selection needs the keyboard (esc); everything else never takes focus. */
   focusable?: boolean;
@@ -51,7 +51,7 @@ export class OverlayWindow {
   private closed = false;
 
   /** `lazy`: the window (and its renderer process, ~90 MB) exists only while needed: created on first show,
-   *  destroyed after `idleMs` hidden. For overlays that are rarely on screen (badge, task panel, suggestions). */
+   *  destroyed after `idleMs` hidden. For overlays that are rarely on screen (badge, task panel). */
   constructor(readonly opts: OverlayWindowOptions & { lazy?: { idleMs: number } }) {
     this.rect = opts.bounds ?? { x: 0, y: 0, width: 10, height: 10 };
     this.clickThrough = opts.clickThrough ?? true;

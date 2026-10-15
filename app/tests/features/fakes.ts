@@ -1,4 +1,4 @@
-// Fake desktop/input/accessibility/apps for driving the control server and Autopilot in tests.
+// Fake desktop/input/accessibility/apps for driving the control server in tests.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Accessibility, Apps, Desktop, DesktopWindow, InputInjector, Point, Rect, UIElement } from "../../src/main/contracts";

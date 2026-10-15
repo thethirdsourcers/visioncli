@@ -3,7 +3,8 @@ import { existsSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgyModels } from "../assistant";
 import { MenuLabels } from "../core/labels";
-import { HOURLY_CAP } from "../features/autopilot";
+import { pastMeetings } from "../features/meeting/recording";
+import { canHideFromCapture } from "../ui/windows/protection";
 import { HomeProject } from "../features/home";
 import { openIntegrations } from "../features/integrations";
 import { LOG_FILE, log } from "../log";
@@ -26,15 +27,10 @@ declare module "./core" {
     settingsSnapshot(): SettingsSnapshot;
     settingsAction<K extends SettingsActionName>(name: K, value: SettingsActions[K]): Promise<void>;
     desktopLabel(): string;
-    toggleAutopilot(): Promise<void>;
-    setAutopilotApp(id: string, on: boolean): void;
     setStartAtLogin(on: boolean): Promise<void>;
     openWithDefault(path: string): void;
-    autopilotChoices: Item[];
   }
 }
-
-App.prototype.autopilotChoices = [];
 
 App.prototype.desktopLabel = function (this: App) {
   const wm = process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || "";
@@ -63,6 +59,8 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     startAtLogin: p.startAtLogin,
     autoUpdate: settings.get("autoUpdate"),
     screenshotEvery: settings.get("screenshotEveryQuestion"),
+    hideFromCapture: settings.get("hideFromCapture"),
+    canHideFromCapture: canHideFromCapture(),
     version: this.version,
     updateAvailable: this.updater.available?.version ?? null,
     updateStatus: this.updater.status,
@@ -112,12 +110,20 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     watchCrashes: settings.get("watchCrashes"),
     ghostCursor: !existsSync(GHOST_OFF),
     quickCommands: settings.get("quickCommands"),
-    // Autopilot
-    autopilot: settings.get("autopilot"),
-    autopilotCalls: this.autopilot.calls,
-    autopilotCap: HOURLY_CAP,
-    autopilotApps: settings.get("autopilotApps"),
-    autopilotChoices: this.autopilotChoices,
+    // Meeting Notes
+    meetingNotes: !!this.meeting?.isOn,
+    meetingSummarizeGuest: settings.get("meetingSummarizeGuest"),
+    meetingSummarizeYou: settings.get("meetingSummarizeYou"),
+    meetingReplies: settings.get("meetingReplies"),
+    meetingCodeLookup: settings.get("meetingCodeLookup"),
+    meetingRecord: settings.get("meetingRecord"),
+    meetingShortcut: this.meetingShortcut,
+    pastMeetings: pastMeetings(10).map((p) => {
+      const first = p.record.rows.find((r) => r.speaker === "Guest") ?? p.record.rows[0];
+      const d = new Date(p.record.started);
+      const when = `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return { id: p.folder, name: `${when} · ${(first?.summary ?? first?.text ?? "No conversation").slice(0, 50)}` };
+    }),
     // Integrations
     tools: p.tools,
     // Advanced
@@ -134,6 +140,7 @@ App.prototype.settingsAction = async function (this: App, name, value) {
     // General
     case "setStartAtLogin": await this.setStartAtLogin(v); break;
     case "setScreenshotEvery": settings.set("screenshotEveryQuestion", v); break;
+    case "setHideFromCapture": settings.set("hideFromCapture", v); this.windows.refreshMenu(); break;
     case "setAutoUpdate": settings.set("autoUpdate", v); break;
     case "checkForUpdates": await this.checkForUpdates(); break;
     case "installUpdate": await this.installUpdate(); break;
@@ -166,10 +173,12 @@ App.prototype.settingsAction = async function (this: App, name, value) {
       if (v) rmSync(GHOST_OFF, { force: true }); else writeFileSync(GHOST_OFF, "");
       break;
     case "setQuickCommands": settings.set("quickCommands", v); break;
-    // Autopilot
-    case "toggleAutopilot": await this.toggleAutopilot(); break;
-    case "autopilotCheckNow": void this.autopilot.checkNow(); break;
-    case "setAutopilotApp": { const a = value as SettingsActions["setAutopilotApp"]; this.setAutopilotApp(a.id, a.on); break; }
+    // Meeting Notes
+    case "toggleMeeting": await this.toggleMeeting(); break;
+    case "showMeetingPanel": this.showMeetingPanel(); break;
+    case "openMeeting": this.openPastMeeting(value as string); break;
+    case "openMeetings": this.openMeetingsFolder(); break;
+    case "setMeetingOption": { const o = value as SettingsActions["setMeetingOption"]; settings.set(o.key, !!o.on); break; }
     // Integrations
     case "checkTools": await this.checkTools(); break;
     case "connectTools": await this.connectToolsFor(v); break;
@@ -196,25 +205,3 @@ App.prototype.setStartAtLogin = async function (this: App, on: boolean) {
   }
 };
 
-App.prototype.toggleAutopilot = async function (this: App) {
-  if (settings.get("autopilot")) {
-    settings.set("autopilot", false);
-    this.autopilot.stop();
-    return;
-  }
-  const r = await dialog.showMessageBox({
-    type: "question", message: "Turn on Autopilot?",
-    detail: `While you work in the apps you tick under Autopilot, VisionCLI reads the front window's text (a small screenshot if there's almost no text) and sends it to Claude Haiku for a suggestion: about 1k tokens a look, at most ${HOURLY_CAP} an hour. Password fields and password managers are skipped; other apps are never read.\n\nIn chat apps it can draft a reply. Nothing is ever sent: you choose Put in reply box or Copy, and press Enter yourself.`,
-    buttons: ["Turn On", "Cancel"], defaultId: 0, cancelId: 1,
-  });
-  if (r.response !== 0) return;
-  settings.set("autopilot", true);
-  this.autopilot.start();
-  if (!settings.get("autopilotApps").length) log("autopilot: on, but no apps picked yet");
-};
-
-App.prototype.setAutopilotApp = function (this: App, id: string, on: boolean) {
-  const apps = settings.get("autopilotApps").filter((x) => x !== id);
-  if (on) apps.push(id);
-  settings.set("autopilotApps", apps);
-};

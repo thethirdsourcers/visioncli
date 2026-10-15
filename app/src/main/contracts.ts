@@ -54,6 +54,12 @@ export interface AudioDevices {
   play(file: string, device: string | null, signal?: AbortSignal): Promise<void>;
 }
 
+/** What the speakers play (Listen to Calls), not the microphone: raw 16 kHz mono s16 PCM chunks. */
+export interface SystemAudio {
+  start(onPcm: (pcm: Buffer) => void): Promise<void>;
+  stop(): void;
+}
+
 // ── stt/: transcription (Voice.swift WhisperEngine, ParakeetEngine; App+Voice.chooseSpeechEngine) ────────────────
 
 export interface SpeechEngine {
@@ -189,7 +195,7 @@ export interface Accessibility {
   press(id: number): Promise<boolean>;                    // AT-SPI action "click"/"press"/"activate"
   setValue(id: number, text: string): Promise<boolean>;   // EditableText
   isSecure(target: { id?: number; at?: Point; focused?: boolean }): Promise<boolean>;
-  /** Visible text of the front window (Autopilot), max `max` chars, never from password fields. */
+  /** Visible text of the front window, max `max` chars, never from password fields. */
   windowText(max: number): Promise<{ app: string; title: string; text: string } | null>;
 }
 

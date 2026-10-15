@@ -1,4 +1,4 @@
-// Placement math for the overlay windows (App+Panel.follow, Mascot.place, Badge, Tasks, Autopilot), kept free of
+// Placement math for the overlay windows (App+Panel.follow, Mascot.place, Badge, Tasks), kept free of
 // Electron so it can be tested. Everything here is top-left origin. Callers pass global *pixels* (contracts.ts);
 // windows are placed in Electron DIPs, so pixels go through toDip* first.
 
@@ -106,11 +106,6 @@ export function placeBadge(size: Size, workArea: Rect): Rect {
 /** TaskHUD: top-right corner, 12 pt in. */
 export function placeHud(size: Size, workArea: Rect): Rect {
   return { x: workArea.x + workArea.width - size.width - 12, y: workArea.y + 12, ...size };
-}
-
-/** SuggestionCard: bottom-right corner, 12 pt in. */
-export function placeSuggestion(size: Size, workArea: Rect): Rect {
-  return { x: workArea.x + workArea.width - size.width - 12, y: workArea.y + workArea.height - size.height - 12, ...size };
 }
 
 export interface DipMark { kind: "box" | "circle" | "arrow" | "step"; a: Point; b: Point; label: string; n?: number }

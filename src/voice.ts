@@ -304,7 +304,7 @@ async function startVoiceLinux(cwd: string): Promise<string> {
   }
 
   return (
-    `Voice mode is on (default project ${resolve(cwd)}; it follows the project of the window under your pointer). Hold Alt, ask your question, then let go (Alt+Super to include a screenshot). ` +
+    `Voice mode is on (pick the project from the tray icon → Project; the first time it is ${resolve(cwd)}). Hold Alt, ask your question, then let go (Alt+Super to include a screenshot). ` +
     `The answer appears above your mouse pointer (Esc dismisses it). The VisionCLI icon in the tray has Quit. ` +
     `On Wayland, push-to-talk and computer control need you in the "input" group once: sh app/scripts/install-deps.sh sets that up.`
   );
@@ -440,7 +440,7 @@ async function startVoiceWin(cwd: string): Promise<string> {
   spawn(app.exe, app.args, { detached: true, stdio: "ignore", env, cwd: homedir(), windowsHide: false }).unref();
 
   return (
-    `Voice mode is on (default project ${resolve(cwd)}; it follows the project of the window under your pointer). Hold Alt, ask your question, then let go. ` +
+    `Voice mode is on (pick the project from the tray icon → Project; the first time it is ${resolve(cwd)}). Hold Alt, ask your question, then let go. ` +
     `The answer appears above your mouse pointer (Esc dismisses it). The VisionCLI icon in the notification area has Quit.`
   );
 }

@@ -15,9 +15,9 @@ namespace VcliWin
     static class Audio
     {
         public const int Rate = 16000;
-        static readonly int HdrSize = Marshal.SizeOf<WAVEHDR>();
+        internal static readonly int HdrSize = Marshal.SizeOf<WAVEHDR>();
 
-        static byte[] Format(int rate, short channels, short bits) // WAVEFORMATEX, PCM
+        internal static byte[] Format(int rate, short channels, short bits) // WAVEFORMATEX, PCM
         {
             var b = new byte[18];
             using (var w = new BinaryWriter(new MemoryStream(b)))
@@ -28,7 +28,7 @@ namespace VcliWin
             return b;
         }
 
-        static int DeviceIndex(string id)
+        internal static int DeviceIndex(string id)
         {
             if (string.IsNullOrEmpty(id) || id == "default") return WAVE_MAPPER;
             if (int.TryParse(id, out int i)) return i;

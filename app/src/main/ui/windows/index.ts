@@ -26,7 +26,7 @@ export interface WindowsOptions {
   noTray?: boolean;
 }
 
-const SECTIONS: SettingsSection[] = ["general", "assistant", "voice", "control", "autopilot", "integrations", "advanced"];
+const SECTIONS: SettingsSection[] = ["general", "assistant", "voice", "control", "meetings", "integrations", "advanced"];
 export const SETUP_STEPS: SetupStepId[] = ["welcome", "microphone", "keyboard", "screen", "control", "terminal", "transcription", "voice", "assistant", "done"];
 
 export function createWindowsUI(bridge: WindowsBridge, opts: WindowsOptions = {}): WindowsUI {

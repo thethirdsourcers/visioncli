@@ -139,7 +139,7 @@ app.whenReady().then(async () => {
       ui.render({ ...base, phase: "thinking", status: "Looking…", project: "visioncli" });
       await sleep(1500);
     }],
-    ["hud-suggestion", async () => {
+    ["hud", async () => {
       ui.spotlight(null);
       ui.render({ ...base, phase: "idle" });
       ui.badge("Using the computer", { icon: "cursorarrow.rays", tint: "#bf5af2", seconds: 10 });
@@ -151,8 +151,6 @@ app.whenReady().then(async () => {
         { id: "5", text: "Approve: send the message?", state: "waiting" },
         { id: "6", text: "Scroll to the forecast table and read the temperatures for the next three days", state: "running" },
       ], false, "Checking the weather");
-      void ui.suggestion.show({ app: "Slack", title: "Reply to Anna about the deploy", detail: "She asked whether the fix is live.", draft: "Yes, it went out at 14:05, I'll keep an eye on the error rate." })
-        .then((a) => console.log("suggestion", a));
       ui.render({ ...base, phase: "done", question: "what's the forecast?", raw: "Sunny, **24°C**." });
       await sleep(1500);
     }],
@@ -171,7 +169,7 @@ app.whenReady().then(async () => {
       console.log(sh("bash", "-c", "for w in $(xdotool search --class electron); do xwininfo -id $w | grep -q IsViewable && echo \"$w $(xwininfo -id $w | grep -E 'Override|geometry' | tr -s ' ' | tr '\\n' ' ')\"; done; true"));
     }],
     ["mascot-peek", async () => {
-      ui.hud.hide(); ui.suggestion.hide(); ui.badge(null);
+      ui.hud.hide(); ui.badge(null);
       move(1200, 500);
       ui.mascot.state("peek", 0);
       await sleep(1200);

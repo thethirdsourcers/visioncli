@@ -1,9 +1,9 @@
 import { execFile, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import type { AudioDevice, AudioDevices, Recorder } from "../contracts";
+import type { AudioDevice, AudioDevices, Recorder, SystemAudio } from "../contracts";
 import { log } from "../log";
 import { RATE, level, streamHeaderLength, wavFile } from "./wav";
-import { WinAudioDevices, WinRecorder } from "./win32";
+import { WinAudioDevices, WinMicStream, WinRecorder, WinSystemAudio } from "./win32";
 import { winHelper } from "../desktop/windows/win32";
 
 // The microphone and speakers (Listener's capture + WavRecorder, AudioDevices.swift) through the sound server's
@@ -257,4 +257,122 @@ class CliAudioDevices implements AudioDevices {
     }
     if (device && !signal?.aborted) return this.play(file, null, signal); // the picked speaker is gone: use the default
   }
+}
+
+// ── Meeting Notes: what the speakers play, and the microphone, as live PCM ───────────────────────────────────────
+
+/** Commands that record the default output's monitor, best first. `sink` is `pactl get-default-sink` (null if unknown). */
+export function systemCaptureCommands(sink: string | null, avail: (bin: string) => boolean = has, raw = pwSupportsRaw): Command[] {
+  const out: Command[] = [];
+  if (avail("parecord") && sink)
+    out.push({ cmd: "parecord", args: ["--raw", "--format=s16le", "--rate=16000", "--channels=1", "--latency-msec=50", `--device=${sink}.monitor`] });
+  // PipeWire: stream.capture.sink records what the default output plays, without knowing its name.
+  if (avail("pw-record"))
+    out.push({ cmd: "pw-record", args: ["--rate=16000", "--channels=1", "--format=s16", ...(raw() ? ["--raw"] : []), "-P", "{ stream.capture.sink=true }", "-"] });
+  if (avail("parecord") && !sink)
+    out.push({ cmd: "parecord", args: ["--raw", "--format=s16le", "--rate=16000", "--channels=1", "--latency-msec=50", "--device=@DEFAULT_MONITOR@"] });
+  return out;
+}
+
+/** A Bluetooth headset's microphone: opening it switches the headphones to their low-quality call profile. */
+export function isBluetoothInput(d: AudioDevice): boolean {
+  return /^bluez_/i.test(d.id) || /bluetooth|hands-?free|headset|airpods|\bbuds\b/i.test(d.name);
+}
+
+/** The microphone for a meeting: the one picked in Settings (else the default), but when that's a Bluetooth
+ *  headset and another mic exists (the laptop's own), that one, so the headphones keep their sound quality for the
+ *  whole meeting. `swappedFrom` is the headset when it was replaced. */
+export function meetingMic(inputs: AudioDevice[], chosen: string | null): { device: AudioDevice | null; swappedFrom: AudioDevice | null } {
+  const picked = (chosen && inputs.find((d) => d.id === chosen)) || inputs.find((d) => d.isDefault) || inputs[0] || null;
+  if (!picked || !isBluetoothInput(picked)) return { device: picked, swappedFrom: null };
+  const other = inputs.find((d) => !isBluetoothInput(d));
+  return other ? { device: other, swappedFrom: picked } : { device: picked, swappedFrom: null };
+}
+
+/** Streams raw 16 kHz mono s16 PCM from the first command that works (a sound server tool writing to a pipe). */
+class CliPcmStream implements SystemAudio {
+  private proc: ChildProcess | null = null;
+  private gen = 0;
+
+  /** `quietOk`: a monitor of an idle (suspended) output may deliver nothing until something plays, so a capture
+   *  that's still running after 4 s counts as started. */
+  constructor(private label: string, private commands: () => Promise<Command[]>, private missing: string, private quietOk = false) {}
+
+  async start(onPcm: (pcm: Buffer) => void): Promise<void> {
+    this.stop();
+    const gen = this.gen;
+    const cmds = await this.commands();
+    if (!cmds.length) throw new Error(this.missing);
+    let lastError = "";
+    for (const c of cmds) {
+      if (gen !== this.gen) return;
+      try {
+        this.proc = await this.tryStart(c, gen, onPcm);
+        log(`meeting: ${this.label} through ${c.cmd} ${c.args[c.args.length - 1]}`);
+        return;
+      } catch (e) {
+        lastError = (e as Error).message;
+        log(`meeting: ${this.label}: ${c.cmd} failed: ${lastError}`);
+      }
+    }
+    throw new Error(lastError || "no audio");
+  }
+
+  private tryStart(c: Command, gen: number, onPcm: (pcm: Buffer) => void): Promise<ChildProcess> {
+    return new Promise((resolve, reject) => {
+      const p = spawn(c.cmd, c.args, { stdio: ["ignore", "pipe", "pipe"] });
+      let started = false, err = "";
+      let head: Buffer | null = Buffer.alloc(0);
+      let odd: Buffer | null = null;
+      // A mic streams silence too, so nothing at all within 4 s means it didn't open.
+      const timer = setTimeout(() => {
+        if (started) return;
+        if (this.quietOk && p.exitCode === null && gen === this.gen) { started = true; resolve(p); return; }
+        p.kill("SIGKILL");
+        reject(new Error("no audio within 4 s"));
+      }, 4000);
+      p.stderr!.on("data", (d: Buffer) => { err = (err + d.toString()).slice(-400); });
+      p.stdout!.on("data", (d: Buffer) => {
+        if (gen !== this.gen) return;
+        if (head) {
+          head = Buffer.concat([head, d]);
+          const n = streamHeaderLength(head);
+          if (n < 0) return;
+          d = head.subarray(n);
+          head = null;
+        }
+        if (odd) { d = Buffer.concat([odd, d]); odd = null; }
+        if (d.length & 1) { odd = Buffer.from(d.subarray(d.length - 1)); d = d.subarray(0, d.length - 1); }
+        if (!d.length) return;
+        if (!started) { started = true; clearTimeout(timer); resolve(p); }
+        onPcm(Buffer.from(d));
+      });
+      p.on("error", (e) => { clearTimeout(timer); if (!started) reject(e); });
+      p.on("exit", (code) => {
+        clearTimeout(timer);
+        if (!started) reject(new Error(err.trim().split("\n").pop() || `exited ${code}`));
+        else if (this.proc === p && gen === this.gen) log(`meeting: ${this.label}: ${c.cmd} stopped by itself (${code}) ${err.trim()}`);
+      });
+    });
+  }
+
+  stop() {
+    this.gen++;
+    this.proc?.kill("SIGKILL");
+    this.proc = null;
+  }
+}
+
+/** What the speakers play (Meeting Notes' guest side). */
+export function createSystemAudio(): SystemAudio {
+  if (process.platform === "win32") return new WinSystemAudio(winHelper());
+  return new CliPcmStream("speakers", async () => systemCaptureCommands(has("pactl") ? await pulseDefault("sinks") : null),
+    "Can't listen to the speakers: install pulseaudio-utils (parecord) or pipewire (pw-record).", true);
+}
+
+/** The microphone as a live stream (Meeting Notes' "you" side): `device()` is the mic to use (null = default). */
+export function createMicStream(device: () => Promise<string | null>): SystemAudio {
+  if (process.platform === "win32") return new WinMicStream(winHelper(), device);
+  return new CliPcmStream("microphone", async () => captureCommands(await device()),
+    "No audio recorder found: install pipewire (pw-record), pulseaudio-utils (parecord) or alsa-utils (arecord).");
 }

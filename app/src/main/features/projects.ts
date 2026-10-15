@@ -20,7 +20,7 @@ export const PROJECT_ROOTS = ["projects", "Projects", "PhpstormProjects", "IdeaP
 const MARKERS = [".git", "package.json", "composer.json", "Package.swift", "Podfile", "build.gradle", "pubspec.yaml", "Cargo.toml",
   "go.mod", "pyproject.toml"];
 
-/** Terminal emulators (their windows aren't projects; Autopilot never reads them). macOS list + Linux terminals. */
+/** Terminal emulators (their windows aren't projects). macOS list + Linux terminals. */
 export const TERMINAL_APPS = new Set(["terminal", "iterm2", "warp", "ghostty", "kitty", "alacritty", "wezterm", "hyper", "tabby", "rio",
   "wave", "gnome-terminal", "gnome-terminal-server", "org.gnome.terminal", "console", "kgx", "org.gnome.console", "ptyxis",
   "org.gnome.ptyxis", "konsole", "org.kde.konsole", "xterm", "uxterm", "urxvt", "rxvt", "st", "st-256color", "foot", "footclient",

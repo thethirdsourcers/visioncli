@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   type DisplayInfo, clampInto, displayForPixel, localDipToPixels, marksByDisplay, mascotSize, placeBadge, placeBubble,
-  placeFrozen, placeHud, placeMascot, placeSuggestion, toDipPoint, toDipRect,
+  placeFrozen, placeHud, placeMascot, toDipPoint, toDipRect,
 } from "../../src/main/ui/overlay/geometry";
 
 // A 2× laptop panel (2880×1800 px = 1440×900 DIP) with a 1× monitor to its right.
@@ -55,10 +55,9 @@ test("the mascot's cut edge sits on the display's right edge, 12 % up", () => {
   assert.equal(r.y, Math.round(1040 - 1040 * 0.12 - 162));
 });
 
-test("badge, HUD and suggestion corners", () => {
+test("badge and HUD corners", () => {
   assert.deepEqual(placeBadge({ width: 200, height: 36 }, laptop.workArea), { x: 620, y: 38, width: 200, height: 36 });
   assert.deepEqual(placeHud({ width: 328, height: 100 }, laptop.workArea), { x: 1100, y: 44, width: 328, height: 100 });
-  assert.deepEqual(placeSuggestion({ width: 348, height: 120 }, laptop.workArea), { x: 1080, y: 768, width: 348, height: 120 });
 });
 
 test("marks go to the display holding their midpoint, in local DIPs", () => {

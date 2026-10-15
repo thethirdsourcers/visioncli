@@ -28,8 +28,12 @@ export interface SettingsShape {
   screenshotEveryQuestion: boolean;
   setupDone: boolean;
   setupStep: string | null;
-  autopilot: boolean;
-  autopilotApps: string[];       // app ids (desktop file id or WM_CLASS)
+  // Meeting Notes: what it does during a meeting (Meeting Notes itself is never remembered: off at each launch).
+  meetingSummarizeGuest: boolean; // a one-line summary under what colleagues say
+  meetingSummarizeYou: boolean;   // and under what you say (off: you know what you said)
+  meetingReplies: boolean;        // three suggested replies when a colleague asks you something
+  meetingCodeLookup: boolean;     // questions about the code answered from the project (read-only)
+  meetingRecord: boolean;         // keep a recording of both sides, to play back with the transcript
   usageInMenuBar: boolean;
   weeklyInMenuBar: boolean;
   pinnedProject: string | null;
@@ -37,6 +41,8 @@ export interface SettingsShape {
   inputDevice: string | null;    // PipeWire/Pulse source name
   outputDevice: string | null;   // sink name
   ghostCursor: boolean;
+  /** Content protection on every VisionCLI window (Windows; not possible on Linux). */
+  hideFromCapture: boolean;
   settingsSection: string | null;
   notifiedUpdate: string | null;
   permissionRepairVersion: string | null;
@@ -48,8 +54,9 @@ export const DEFAULTS: SettingsShape = {
   speak: false, model: "default", stt: "whisper", whisperModel: "small.en", tts: "kokoro", speechSpeed: 2, kokoroVoice: "af_heart",
   voice: null, terminalMode: true, autoUpdate: true, assistant: "claude", effort: null, watchCrashes: true, computerControl: "ask",
   agyModel: null, smartRouting: true, quickCommands: true, screenshotEveryQuestion: false, setupDone: false, setupStep: null,
-  autopilot: false, autopilotApps: [], usageInMenuBar: true, weeklyInMenuBar: false, pinnedProject: null, autoActivity: true,
-  inputDevice: null, outputDevice: null, ghostCursor: true, settingsSection: null, notifiedUpdate: null, permissionRepairVersion: null,
+  meetingSummarizeGuest: true, meetingSummarizeYou: false, meetingReplies: true, meetingCodeLookup: true, meetingRecord: true,
+  usageInMenuBar: true, weeklyInMenuBar: false, pinnedProject: null, autoActivity: true,
+  inputDevice: null, outputDevice: null, ghostCursor: true, hideFromCapture: false, settingsSection: null, notifiedUpdate: null, permissionRepairVersion: null,
   store: {},
 };
 

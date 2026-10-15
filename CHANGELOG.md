@@ -2,15 +2,17 @@
 
 ## Unreleased
 
-- **Meeting Notes (macOS; Linux and Windows to follow):** a note-taker for work meetings. Press **⇧⌥⌘R** (or Settings → Meeting Notes) to start.
-  - Your colleagues (your Mac's sound) and you (the microphone) are transcribed on your Mac and shown as a chat in a side panel.
+- **Meeting Notes (macOS, Linux and Windows):** a note-taker for work meetings. Press **⇧⌥⌘R** on macOS, **Shift+Alt+Super+R** on Linux or **Shift+Alt+Win+R** on Windows (or Settings → Meeting Notes) to start.
+  - Your colleagues (your computer's sound) and you (the microphone) are transcribed on your computer and shown as a chat in a side panel. With a Bluetooth headset, the computer's own mic records you so the headphones keep their sound quality.
   - Each colleague's turn gets a one-line summary.
   - When you're asked something, three short replies appear once they've finished talking. Click one to copy it, or type it where you're typing; nothing is sent.
   - Questions about the code are answered from the project (read-only), with file:line.
   - Each meeting is saved with its notes, a summary at the end (overview, key points, questions, action items) and a recording to play back alongside the transcript.
   - Every part can be switched off in Settings.
 - **Hide VisionCLI from screen sharing** (Settings → Meeting Notes): VisionCLI's windows stay visible to you but are left out of screen shares and recordings.
-- **Autopilot is removed** on macOS: Meeting Notes takes its place in Settings.
+- **Hide VisionCLI from screen sharing** works on Windows too (not possible on Linux).
+- **Autopilot is removed** on every platform: Meeting Notes takes its place in Settings.
+- **The project is picked by hand** (Project menu): it no longer follows the window under the pointer.
 
 ## 0.10.5
 

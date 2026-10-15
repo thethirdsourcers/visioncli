@@ -1,14 +1,14 @@
-// The overlay UI (Views.swift, App+Panel.swift, Mascot.swift, Overlays.swift, Spotlight.swift, Badge.swift, Tasks.swift,
-// Autopilot.SuggestionCard): the windows that float over the user's screen. The orchestrator drives them with
+// The overlay UI (Views.swift, App+Panel.swift, Mascot.swift, Overlays.swift, Spotlight.swift, Badge.swift, Tasks.swift):
+// the windows that float over the user's screen. The orchestrator drives them with
 // OverlayState and gets BubbleActions back. Inputs are global pixels (contracts.ts); windows are placed in DIPs.
 
-import { clipboard, screen } from "electron";
+import { screen } from "electron";
 import { execFile } from "node:child_process";
 import type { BubbleAction, Mark, OverlayState, Point, Rect, TaskStep } from "../../contracts";
 import { log } from "../../log";
 import {
   type DisplayInfo, type Size, contains, displayForDip, displayForPixel, localDipToPixels, marksByDisplay, placeBadge,
-  placeBubble, placeFrozen, placeHud, placeMascot, placeSuggestion, toDipPoint, toDipRect,
+  placeBubble, placeFrozen, placeHud, placeMascot, toDipPoint, toDipRect,
 } from "./geometry";
 import { overlaySupport } from "./platform";
 import { OverlayWindow } from "./window";
@@ -18,8 +18,6 @@ export type { OverlaySupport } from "./platform";
 
 export type MascotState = "peek" | "listening" | "thinking" | "hidden";
 export type HudAction = "pause" | "resume" | "stop";
-export type SuggestionAnswer = "insert" | "copy" | "dismiss";
-export interface Suggestion { title: string; detail: string; draft?: string; app?: string }
 
 export interface OverlayUI {
   render(state: OverlayState): void;
@@ -43,12 +41,6 @@ export interface OverlayUI {
     onAction(cb: (a: HudAction) => void): void;
     /** Height the HUD takes in the top-right corner (the bubble goes under it). */
     readonly visibleHeight: number;
-  };
-  suggestion: {
-    /** Resolves when the user picks; "copy" has already put the text on the clipboard. Auto-dismisses after 20 s
-     *  (45 s with a draft) unless the pointer is on it. A newer suggestion dismisses the older one. */
-    show(s: Suggestion): Promise<SuggestionAnswer>;
-    hide(): void;
   };
   mascot: { state(state: MascotState, level?: number): void };
   pointerOverBubble(): boolean;
@@ -338,48 +330,6 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
     get visibleHeight() { return hudHeight(); },
   };
 
-  // ── Autopilot suggestion card ────────────────────────────────────────────────────────────────────────────────────
-
-  const sugWin = new OverlayWindow({ page: "suggestion", clickThrough: false, lazy: { idleMs: 60_000 } });
-  let sugSize: Size = { width: 348, height: 120 };
-  let sugArea: Rect | null = null;
-  let sugHover = false;
-  let sugTimer: NodeJS.Timeout | null = null;
-  let sugPending: { s: Suggestion; resolve: (a: SuggestionAnswer) => void } | null = null;
-  const placeSugNow = () => { if (sugArea) sugWin.setBounds(placeSuggestion(sugSize, sugArea)); };
-  sugWin.on("suggestion:size", (s: Size) => { sugSize = s; placeSugNow(); });
-  sugWin.on("suggestion:hover", (h: boolean) => { sugHover = h; });
-
-  function sugFinish(a: SuggestionAnswer) {
-    if (sugTimer) { clearTimeout(sugTimer); sugTimer = null; }
-    sugWin.hide();
-    const p = sugPending;
-    sugPending = null;
-    if (!p) return;
-    if (a === "copy") clipboard.writeText(p.s.draft ?? `${p.s.title}. ${p.s.detail}`);
-    p.resolve(a);
-  }
-  sugWin.on("suggestion:action", (a: SuggestionAnswer) => sugFinish(a));
-
-  const suggestion: OverlayUI["suggestion"] = {
-    show(s) {
-      sugFinish("dismiss");
-      return new Promise((resolve) => {
-        sugPending = { s, resolve };
-        sugHover = false;
-        sugWin.send("suggestion:show", s);
-        sugArea = pointerDisplay().workArea;
-        placeSugNow();
-        sugWin.show();
-        const schedule = (sec: number) => {
-          sugTimer = setTimeout(() => { if (sugHover) schedule(5); else sugFinish("dismiss"); }, sec * 1000);
-        };
-        schedule(s.draft ? 45 : 20);
-      });
-    },
-    hide() { sugFinish("dismiss"); },
-  };
-
   // ── Mascot ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
   const mascotWin = new OverlayWindow({ page: "mascot" });
@@ -415,7 +365,7 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  const allWindows = () => [bubble, badgeWin, hudWin, sugWin, mascotWin, spot, glowWin, ...markWindows.values(), ...regionWindows.values()]
+  const allWindows = () => [bubble, badgeWin, hudWin, mascotWin, spot, glowWin, ...markWindows.values(), ...regionWindows.values()]
     .filter((w): w is OverlayWindow => !!w);
 
   async function hiddenDuring<T>(fn: () => Promise<T>): Promise<T> {
@@ -439,7 +389,6 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
     badge,
     controlGlow,
     hud,
-    suggestion,
     mascot,
     pointerOverBubble,
     hiddenDuring,

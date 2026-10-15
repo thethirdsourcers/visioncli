@@ -1,0 +1,59 @@
+/* The Meeting Notes panel (MeetingPanel.swift): a dark chat with a header and, after the meeting, a player. */
+html, body { height: 100%; background: #1c1c22; }
+body { display: flex; flex-direction: column; overflow: hidden; user-select: text; }
+header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); flex: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+.mono { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+.ended { color: var(--green); font-size: 12px; font-weight: 600; }
+.engine { color: rgba(255,255,255,0.5); font-size: 13px; }
+.spacer { flex: 1; }
+.project { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 3px 8px; border-radius: 6px; color: rgba(255,255,255,0.85); }
+.project:hover, .icon:hover { background: rgba(255,255,255,0.1); }
+.icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; border-radius: 6px; color: rgba(255,255,255,0.6); }
+.icon.on { color: var(--cyan); }
+.btn { font-size: 12px; padding: 3px 12px; border-radius: 6px; background: rgba(255,255,255,0.14); }
+.btn:hover { background: rgba(255,255,255,0.22); }
+#player { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); flex: none; }
+#player[hidden] { display: none; }
+#player input { flex: 1; accent-color: var(--blue); }
+main { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.muted { color: rgba(255,255,255,0.55); font-size: 12px; }
+.faint { color: rgba(255,255,255,0.35); }
+.pad { padding: 4px 2px; }
+.empty { color: rgba(255,255,255,0.55); font-size: 12px; text-align: center; margin-top: 30px; line-height: 1.5; }
+.row { display: flex; flex-direction: column; gap: 4px; max-width: 86%; }
+.row.guest { align-self: flex-start; align-items: flex-start; }
+.row.you { align-self: flex-end; align-items: flex-end; }
+.meta { font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5); display: flex; align-items: center; gap: 4px; }
+.row.playing .meta { color: var(--blue); }
+.seek { width: 16px; height: 16px; font-size: 9px; }
+.bubble { font-size: 13px; padding: 7px 10px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; }
+.guest .bubble { background: rgba(255,255,255,0.1); }
+.you .bubble { background: rgba(10,132,255,0.85); }
+.bubble.open { opacity: 0.75; }
+.row.playing .bubble { box-shadow: 0 0 0 2px var(--blue); }
+.summary { font-size: 11px; color: rgba(255,255,255,0.55); }
+.chips { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; margin-top: 2px; }
+.chip-row { display: flex; align-items: center; gap: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; text-align: left; font-size: 12px; padding: 5px 10px; border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(10,132,255,0.55); }
+.chip:hover { box-shadow: inset 0 0 0 1px rgba(10,132,255,0.95); }
+.chip-row .type { visibility: hidden; }
+.chip-row:hover .type { visibility: visible; }
+.shimmer { height: 24px; border-radius: 999px; background: rgba(255,255,255,0.1); animation: shimmer 1.6s ease-in-out infinite; }
+@keyframes shimmer { 50% { background: rgba(255,255,255,0.22); } }
+.code { max-width: 300px; padding: 8px; border-radius: 8px; background: rgba(48,209,88,0.08); box-shadow: inset 0 0 0 1px rgba(48,209,88,0.3); }
+.code-title { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.55); margin-bottom: 4px; }
+.code-body { font-size: 12px; line-height: 1.4; }
+.overview { padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.06); }
+.ov-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.ov-h { font-size: 12px; font-weight: 600; margin-top: 6px; }
+.ov-l { font-size: 12px; line-height: 1.45; }
+.overview code { font-family: var(--mono); font-size: 11px; }
+.speaking { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.55); }
+.speaking.you { align-self: flex-end; }
+.dots { display: inline-flex; gap: 3px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.55); animation: dot 1s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.15s; } .dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot { 50% { opacity: 0.25; } }

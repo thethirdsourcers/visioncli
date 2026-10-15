@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { AudioDevice, AudioDevices, Recorder } from "../contracts";
+import type { AudioDevice, AudioDevices, Recorder, SystemAudio } from "../contracts";
 import type { WinHelper } from "../desktop/windows/win32";
 import { log } from "../log";
 
@@ -73,5 +73,61 @@ export class WinAudioDevices implements AudioDevices {
     log(`audio: couldn't play ${file} on ${device ?? "default"}: ${failed.message}`);
     if (device) return this.play(file, null, signal); // the picked speaker is gone: use the default
     throw failed;
+  }
+}
+
+/** What the speakers play (Meeting Notes): the helper's WASAPI loopback, streamed as `loopback` events. */
+export class WinSystemAudio implements SystemAudio {
+  private off: (() => void) | null = null;
+
+  constructor(private helper: WinHelper) {}
+
+  async start(onPcm: (pcm: Buffer) => void): Promise<void> {
+    this.stop();
+    this.off = this.helper.on("loopback", (e) => onPcm(Buffer.from(e.data, "base64")));
+    try {
+      await this.helper.call("loopback.start", {});
+    } catch (e) {
+      this.stop();
+      throw e;
+    }
+    log("meeting: speakers through WASAPI loopback on the default output");
+  }
+
+  stop() {
+    if (!this.off) return;
+    this.off();
+    this.off = null;
+    this.helper.call("loopback.stop", {}).catch(() => {});
+  }
+}
+
+/** The microphone as a live stream (Meeting Notes): a second waveIn in the helper, independent of the hold-to-talk
+ *  recording, streamed as `mic` events. */
+export class WinMicStream implements SystemAudio {
+  private off: (() => void) | null = null;
+
+  constructor(private helper: WinHelper, private device: () => Promise<string | null>) {}
+
+  async start(onPcm: (pcm: Buffer) => void): Promise<void> {
+    this.stop();
+    const device = await this.device();
+    this.off = this.helper.on("mic", (e) => onPcm(Buffer.from(e.data, "base64")));
+    try {
+      await this.helper.call("micstream.start", { device });
+    } catch (e) {
+      if (!device) { this.stop(); throw e; }
+      // The picked microphone is gone: the default one beats nothing.
+      log(`meeting: microphone ${device} failed (${(e as Error).message}); using the default`);
+      await this.helper.call("micstream.start", { device: null }).catch((err) => { this.stop(); throw err; });
+    }
+    log(`meeting: microphone through waveIn ${device ?? "(default)"}`);
+  }
+
+  stop() {
+    if (!this.off) return;
+    this.off();
+    this.off = null;
+    this.helper.call("micstream.stop", {}).catch(() => {});
   }
 }

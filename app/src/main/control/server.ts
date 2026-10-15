@@ -47,7 +47,6 @@ export interface ControlDeps {
   mode?(): "ask" | "auto" | "off";
   assistantName?(): string;
   announce?(text: string): void;
-  autopilot?: { enabled(): boolean; checkNow(): void };
   tasks?: ControlTasks;
   /** The step being performed ("Click "Save" button in gedit…"): bubble status / toast / badge. */
   onStatus?(text: string): void;
