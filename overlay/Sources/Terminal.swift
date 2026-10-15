@@ -295,7 +295,8 @@ final class TerminalSession {
                 self.follow(url, fromStart: false)
                 TerminalSession.work.async {
                     let id = self.applescript(script)
-                    DispatchQueue.main.async { done(self.usesITerm ? id : id.map { _ in "selected tab of front window" }) }
+                    // Terminal: that window's tab, so later questions go to it even when another window is in front.
+                    DispatchQueue.main.async { done(self.usesITerm ? id : id.map { "selected tab of window id \($0)" }) }
                 }
             }
         }
@@ -352,7 +353,19 @@ final class TerminalSession {
             end tell
             """, transcriptURL)
         }
-        return ("tell application \"Terminal\"\nset t to do script \"exec \(file.path)\"\nactivate\nreturn t as text\nend tell", transcriptURL)
+        // A Terminal tab can't be turned into text ("Can't make «class ttab» 1 of window id … into type text"), which
+        // made every open look failed and the next question open yet another window: return its window's id.
+        return ("""
+        tell application "Terminal"
+          set t to do script "exec \(file.path)"
+          activate
+          set y to tty of t
+          repeat with w in windows
+            if tty of selected tab of w is y then return id of w as text
+          end repeat
+          return id of front window as text
+        end tell
+        """, transcriptURL)
     }
 
     /// Claude sometimes takes fast typing for a paste and swallows the Return that follows it. Once the question shows
