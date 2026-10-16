@@ -43,6 +43,8 @@ App.prototype.menuModel = function (this: App): MenuModel {
   const seen = new Set<string>();
   for (const e of this.history.entries.slice(0, 50)) seen.add(e.project);
   recent.push(...[...seen].sort());
+  // Projects you can switch to even before asking anything: your editors' recents and project folders.
+  recent.push(...(this.projects?.recentProjects(8) ?? []));
   return {
     currentProject: this.currentProject,
     pinnedProject: settings.get("pinnedProject"),

@@ -68,6 +68,7 @@ export class ProjectResolver {
   private byName = new Map<string, string>(); // lowercased folder name → path (first source wins)
   private lastRefresh = 0;
   private building = false;
+  private recent: { at: number; list: string[] } | null = null;
 
   constructor(private home = homedir(), private config = defaultConfigDir(), private platform: string = process.platform) {}
 
@@ -107,6 +108,22 @@ export class ProjectResolver {
       if (!map.has(key) && existsSync(path)) map.set(key, path);
     }
     return map;
+  }
+
+  /** Projects to offer when picking one by hand: the editors' recents first (newest first), then the indexed
+   *  project folders, most recently changed first. */
+  recentProjects(limit = 8, now = Date.now()): string[] {
+    this.refreshIfStale(now);
+    // The tray menu is rebuilt often and the editors' files can be large: re-read them once a minute.
+    if (this.recent && now - this.recent.at < 60_000) return this.recent.list.slice(0, limit);
+    const out: string[] = [];
+    const add = (p: string) => { if (p && !out.includes(p) && isDir(p)) out.push(p); };
+    [...this.vscodeRecents(), ...this.jetbrainsRecents()].forEach(add);
+    const mtime = (p: string) => { try { return statSync(p).mtimeMs; } catch { return 0; } };
+    [...this.byName.values()].filter((p) => this.isProject(p)).sort((a, b) => mtime(b) - mtime(a)).forEach(add);
+    // Not while the first index is still being built: it would hide the project folders for a minute.
+    if (!this.building) this.recent = { at: now, list: out.slice(0, 20) };
+    return out.slice(0, limit);
   }
 
   project(window: Pick<DesktopWindow, "title"> | null | undefined): string | null {

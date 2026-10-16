@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { inflateSync } from "node:zlib";
 import { trayIcon, ringIcon, usageColor, GREEN, ORANGE, RED } from "../../src/main/ui/windows/icons";
-import { buildMenu, projectLabel, resets, shortName, tokens, tooltip, trayRings, type MItem } from "../../src/main/ui/windows/menu";
+import { buildMenu, projectChoices, projectLabel, resets, shortName, tokens, tooltip, trayRings, type MItem } from "../../src/main/ui/windows/menu";
 import { encodePNG, Painter } from "../../src/main/ui/windows/painter";
 import type { MenuModel, SettingsSnapshot } from "../../src/main/ui/windows/types";
 import { filterEntries, projectsOf } from "../../src/renderer/history/model";
@@ -120,6 +120,15 @@ test("project submenu: picked by hand (no Auto), Home, candidates once each, Cho
   assert.ok(!sub.some((i) => i.id === "pickProject" && i.arg === null), "no Auto item");
   const empty = labels(buildMenu(model({ running: [], windows: [], recent: [] }))[0].submenu!);
   assert.ok(empty.includes("No projects found yet"));
+});
+
+test("projectChoices: running, then open, then recents; no Home, no repeats, capped", () => {
+  const c = projectChoices({ homeProject: "/h/VisionCLI", running: [{ project: "/h/a", assistant: "claude" }], windows: ["/h/b", "/h/a"],
+    recent: ["/h/VisionCLI", "/h/c", "/h/b", ...Array.from({ length: 30 }, (_, i) => `/h/r${i}`)] } as never);
+  assert.deepEqual(c.slice(0, 3).map((x) => x.path), ["/h/a", "/h/b", "/h/c"]);
+  assert.match(c[0].label, /^a   claude running · /);
+  assert.ok(!c.some((x) => x.path === "/h/VisionCLI"));
+  assert.equal(c.length, 15);
 });
 
 test("usage submenu and labels", () => {

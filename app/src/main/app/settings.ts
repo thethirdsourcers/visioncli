@@ -5,6 +5,7 @@ import { AgyModels } from "../assistant";
 import { MenuLabels } from "../core/labels";
 import { pastMeetings } from "../features/meeting/recording";
 import { canHideFromCapture } from "../ui/windows/protection";
+import { projectChoices } from "../ui/windows/menu";
 import { HomeProject } from "../features/home";
 import { openIntegrations } from "../features/integrations";
 import { LOG_FILE, log } from "../log";
@@ -48,7 +49,9 @@ App.prototype.desktopLabel = function (this: App) {
 App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
   void this.refreshProbe();
   const p = this.probe;
-  const kokoroAvailable = !!VoiceModels.kokoroModel() && !!VoiceModels.kokoroVoices();
+  // The Kokoro voices are offered only when Kokoro can run (model, voices, uv and its script); with the files but no
+  // uv, picking one saved it while the system voice kept answering.
+  const kokoroAvailable = KokoroEngine.available();
   const whisperModels = VoiceModels.whisperModels().map((m) => m[0]);
   const defIn = p.inputs.find((d) => d.isDefault), defOut = p.outputs.find((d) => d.isDefault);
   const engine = this.currentSpeechEngine;
@@ -61,6 +64,19 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     screenshotEvery: settings.get("screenshotEveryQuestion"),
     hideFromCapture: settings.get("hideFromCapture"),
     canHideFromCapture: canHideFromCapture(),
+    project: this.currentProject,
+    projectChoices: (() => {
+      const m = this.menuModel();
+      const list = [{ id: HomeProject.path, name: "Home: general questions, no project" },
+        ...projectChoices(m).map((c) => {
+          const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+          const short = home && c.path.startsWith(home) ? "~" + c.path.slice(home.length) : c.path;
+          return { id: c.path, name: `${c.label.split("   ")[0]} (${short})` };
+        })];
+      // A folder picked with Choose Folder… that isn't in the list still shows as chosen.
+      if (!list.some((c) => c.id === this.currentProject)) list.push({ id: this.currentProject, name: this.currentProject });
+      return list;
+    })(),
     version: this.version,
     updateAvailable: this.updater.available?.version ?? null,
     updateStatus: this.updater.status,
@@ -82,7 +98,8 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     speed: settings.get("speechSpeed"),
     voice: kokoroAvailable && settings.get("tts") === "kokoro" ? settings.get("kokoroVoice") : null,
     kokoroVoices: kokoroAvailable ? VoiceModels.kokoroVoiceList.map(([id, name]) => ({ id, name })) : [],
-    kokoroInstalled: kokoroAvailable && KokoroEngine.available(),
+    kokoroInstalled: kokoroAvailable,
+    kokoroProblem: kokoroAvailable ? this.speaker.kokoro.lastError : null,
     installStatus: this.installer.status ?? this.setupBusy.transcription ?? null,
     speechEngine: engine,
     // Offered on every 64-bit machine: choosing it downloads sherpa-onnx and the model (like macOS, where it ships).
@@ -140,6 +157,8 @@ App.prototype.settingsAction = async function (this: App, name, value) {
     // General
     case "setStartAtLogin": await this.setStartAtLogin(v); break;
     case "setScreenshotEvery": settings.set("screenshotEveryQuestion", v); break;
+    case "pickProject": if (v) this.pickProject(v); break;
+    case "chooseProjectFolder": await this.chooseProjectFolder(); break;
     case "setHideFromCapture": settings.set("hideFromCapture", v); this.windows.refreshMenu(); break;
     case "setAutoUpdate": settings.set("autoUpdate", v); break;
     case "checkForUpdates": await this.checkForUpdates(); break;

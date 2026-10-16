@@ -40,12 +40,19 @@ export class KokoroEngine {
 
   static available(): boolean { return !!VoiceModels.kokoroModel() && !!VoiceModels.kokoroVoices() && !!VoiceModels.binary("uv") && !!kokoroScript(); }
 
+  /** Why the last start failed (shown in Settings → Voice); null once it's ready. */
+  lastError: string | null = null;
+
   get isRunning() { return !!this.proc; }
 
   start() {
     if (this.proc) return;
     const uv = VoiceModels.binary("uv"), model = VoiceModels.kokoroModel(), voices = VoiceModels.kokoroVoices(), script = kokoroScript();
-    if (!uv || !model || !voices || !script) { log("kokoro unavailable (needs uv, kokoro-v1.0.onnx, voices-v1.0.bin)"); return; }
+    if (!uv || !model || !voices || !script) {
+      this.lastError = !uv ? "Kokoro needs uv, which isn't installed." : "Kokoro's voice files are missing.";
+      log("kokoro unavailable (needs uv, kokoro-v1.0.onnx, voices-v1.0.bin)");
+      return;
+    }
     const outDir = join(TMP, "visioncli-tts");
     mkdirSync(outDir, { recursive: true });
     const env = { ...process.env, PATH: [process.env.PATH, join(homedir(), ".local/bin"), join(homedir(), ".cargo/bin")].filter(Boolean).join(delimiter) };
@@ -63,6 +70,9 @@ export class KokoroEngine {
     p.on("exit", (code) => {
       if (this.proc !== p) return;
       log(`kokoro exited (${code})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" | ")}` : ""}`);
+      // Exiting before it was ready is a broken install (Settings → Voice says so, instead of the system voice
+      // quietly answering for the Kokoro voice you picked).
+      if (!this.ready) this.lastError = `Kokoro couldn't start${stderr.trim() ? `: ${stderr.trim().split("\n").pop()}` : "."}`;
       this.proc = null;
       this.ready = false;
       this.failAll();
@@ -97,7 +107,7 @@ export class KokoroEngine {
   }
 
   private handle(obj: { ready?: boolean; id?: number; path?: string; error?: string }) {
-    if (obj.ready) { this.ready = true; log("kokoro ready"); return; }
+    if (obj.ready) { this.ready = true; this.lastError = null; log("kokoro ready"); return; }
     const cb = obj.id !== undefined ? this.callbacks.get(obj.id) : undefined;
     if (!cb) return;
     this.callbacks.delete(obj.id!);

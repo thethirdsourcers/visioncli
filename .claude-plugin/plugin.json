@@ -1,6 +1,6 @@
 {
   "name": "visioncli",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "AI co-assistant for developers that sees your screen and uses your Mac: ask about what you're looking at or have it do the task, by typing or voice, with Claude Code or Gemini (Antigravity).",
   "mcpServers": {
     "visioncli": {

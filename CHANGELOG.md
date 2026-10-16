@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.1
+
+Linux and Windows only (macOS stays on 0.11.0).
+
+- **Switching projects:**
+  - The Project menu now lists your recent projects (VS Code, Cursor and JetBrains recents, then your project folders), so there's something to switch to before you've asked anything.
+  - Settings → General has a Project picker and Choose Folder…, which also works on desktops whose tray can't open submenus.
+- **Voices:**
+  - Settings → Voice only lists the Kokoro voices when Kokoro can actually run. Before, a voice picked without uv was saved while the system voice kept answering, and its sample didn't play.
+  - When Kokoro fails to start, Settings says why and offers Reinstall.
+
 ## 0.11.0
 
 - **Meeting Notes (macOS, Linux and Windows):** a note-taker for work meetings. Press **⇧⌥⌘R** on macOS, **Shift+Alt+Super+R** on Linux or **Shift+Alt+Win+R** on Windows (or Settings → Meeting Notes) to start.

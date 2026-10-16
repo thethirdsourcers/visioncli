@@ -71,6 +71,10 @@ function render(top = false) {
 
 const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
   general: (s) => [
+    card("Project", "Questions, terminals and Meeting Notes' code answers use this project until you pick another.", [
+      row("Project", null, select(s.project, s.projectChoices.map((c) => ({ value: c.id, label: c.name })), (v) => act("pickProject", v))),
+      row("Another folder", null, button("Choose Folder…", () => act("chooseProjectFolder"))),
+    ]),
     card(null, null, [
       switchRow("Start at login", "Opens VisionCLI when you log in.", s.startAtLogin, (on) => act("setStartAtLogin", on)),
       switchRow("Screenshot every question",
@@ -159,6 +163,8 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
       card("Voice", "Choosing a voice plays a sample.", [
         ...s.kokoroVoices.map((v) => voiceRow(v.id, `Kokoro · ${v.name}`)),
         voiceRow(null, s.platform === "win32" ? "Windows voice" : "System voice (speech-dispatcher)"),
+        s.kokoroProblem && row("Kokoro isn't working", s.kokoroProblem + " The system voice reads answers until it's fixed.",
+          button("Reinstall…", () => act("installKokoro")), { detailClass: "error" }),
         !s.kokoroInstalled && (s.installStatus ? installProgress(s.installStatus)
           : row("Natural voices", "Seven natural-sounding voices (US and UK) that run on your computer. About 350 MB.", button("Download…", () => act("installKokoro")))),
       ]),

@@ -67,6 +67,8 @@ export interface SettingsSnapshot {
   screenshotEvery: boolean;
   hideFromCapture: boolean;
   canHideFromCapture: boolean;         // false on Linux (no way to exclude a window from capture)
+  project: string;                     // the project questions go to (picked by hand)
+  projectChoices: Item[];              // Home, running CLIs, open windows, recents; id = path
   version: string;
   updateAvailable: string | null;
   updateStatus: string | null;
@@ -89,6 +91,7 @@ export interface SettingsSnapshot {
   voice: string | null;                // Kokoro voice id; null = the system voice (speech-dispatcher)
   kokoroVoices: Item[];                // empty until Kokoro is installed
   kokoroInstalled: boolean;
+  kokoroProblem: string | null;        // Kokoro is installed but failed to start (the last error)
   installStatus: string | null;        // "Downloading Kokoro voices… 42%"
   speechEngine: string;                // "parakeet" | "whisper:<model>" | "system"
   hasParakeet: boolean;
@@ -140,6 +143,8 @@ export interface SettingsActions {
   setStartAtLogin: boolean;
   setScreenshotEvery: boolean;
   setHideFromCapture: boolean;
+  pickProject: string;                 // a path
+  chooseProjectFolder: undefined;
   setAutoUpdate: boolean;
   checkForUpdates: undefined;
   installUpdate: undefined;

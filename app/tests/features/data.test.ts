@@ -135,6 +135,11 @@ describe("ProjectResolver", () => {
       { id: "1", app: "kitty", appId: "kitty", title: "api", bounds: { x: 0, y: 0, width: 1, height: 1 } },
       { id: "2", app: "PhpStorm", appId: "jetbrains-phpstorm", title: "shop – a", bounds: { x: 0, y: 0, width: 1, height: 1 } },
     ]), [join(home, "work/shop")]);
+    // Projects to pick by hand: the editors' recents first, then project folders (only real projects).
+    const recent = r.recentProjects(8);
+    assert.deepEqual(recent.slice(0, 2), [join(home, "elsewhere/vsapp"), join(home, "work/shop")]);
+    assert.ok(recent.includes(join(home, "projects/group/inner")));
+    assert.ok(!recent.includes(join(home, "projects/group")), "a plain folder isn't offered");
   });
 });
 

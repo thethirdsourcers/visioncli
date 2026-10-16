@@ -68,6 +68,24 @@ export function trayRings(m: MenuModel): { session: number; week: number | null 
   return { session: session.percent, week: weeklyInMenuBar ? week.percent : null };
 }
 
+/** The projects to pick from (tray menu and Settings → General): running CLIs, open editor windows, then recents
+ *  (the history, the editors' recent projects, project folders), Home not included. */
+export function projectChoices(m: Pick<MenuModel, "homeProject" | "running" | "windows" | "recent">, limit = 15): { path: string; label: string }[] {
+  const out: { path: string; label: string }[] = [];
+  const seen = new Set([m.homeProject]);
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const add = (path: string, note: string) => {
+    if (!path || seen.has(path) || out.length >= limit) return;
+    seen.add(path);
+    const short = home && path.startsWith(home) ? "~" + path.slice(home.length) : path;
+    out.push({ path, label: `${basename(path)}   ${note}${short}` });
+  };
+  for (const r of m.running) add(r.project, `${r.assistant} running · `);
+  for (const p of m.windows) add(p, "open · ");
+  for (const p of m.recent) add(p, "recent · ");
+  return out;
+}
+
 export function buildMenu(m: MenuModel, now = new Date()): MItem[] {
   const items: MItem[] = [];
   const pinned = m.pinnedProject;
@@ -77,20 +95,9 @@ export function buildMenu(m: MenuModel, now = new Date()): MItem[] {
     { id: "pickProject", arg: m.homeProject, label: "Home: general questions, no project", type: "checkbox", checked: pinned === m.homeProject },
     sep,
   ];
-  const seen = new Set([m.homeProject]);
-  const home = process.env.HOME ?? "";
-  let added = 0;
-  const add = (path: string, note: string) => {
-    if (!path || seen.has(path)) return;
-    seen.add(path);
-    added++;
-    const short = home && path.startsWith(home) ? "~" + path.slice(home.length) : path;
-    projects.push({ id: "pickProject", arg: path, label: `${basename(path)}   ${note}${short}`, type: "checkbox", checked: pinned === path });
-  };
-  for (const r of m.running) add(r.project, `${r.assistant} running · `);
-  for (const p of m.windows) add(p, "open · ");
-  for (const p of m.recent) add(p, "recent · ");
-  if (!added) projects.push({ label: "No projects found yet", enabled: false });
+  const choices = projectChoices(m);
+  for (const c of choices) projects.push({ id: "pickProject", arg: c.path, label: c.label, type: "checkbox", checked: pinned === c.path });
+  if (!choices.length) projects.push({ label: "No projects found yet", enabled: false });
   projects.push(sep, { id: "chooseFolder", label: "Choose Folder…" });
   items.push({ label: `Project: ${projectLabel(m.currentProject, m.homeProject)}`, submenu: projects });
 
