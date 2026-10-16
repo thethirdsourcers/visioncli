@@ -14,10 +14,12 @@ on:
         description: Also build arm64 (a second runner)
         type: boolean
         default: true
+      # Off until Microsoft has merged the package's first version (microsoft/winget-pkgs#452413): until then the
+      # update can only fail. Releases go to GitHub only.
       winget:
-        description: Open the winget-pkgs update
+        description: Open the winget-pkgs update (only once the package is in winget)
         type: boolean
-        default: true
+        default: false
       site:
         description: Rebuild the website afterwards (download links)
         type: boolean

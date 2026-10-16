@@ -17,8 +17,8 @@ Releases are started by hand, one platform at a time, so each release only uses 
    The first one creates the GitHub release with the CHANGELOG notes; each adds its files and its lines in
    `SHA256SUMS.txt`.
 3. Options per workflow: Linux and Windows can skip the arm64 build (`-f arm64=false`); Linux updates the website
-   with its apt/dnf repositories (on by default) and the Snap Store; macOS updates Homebrew; Windows opens the winget
-   update. macOS and Windows can rebuild the website too (`-f site=true`).
+   with its apt/dnf repositories (on by default) and the Snap Store; macOS updates Homebrew; Windows can open the winget
+   update (`-f winget=true`, off by default until Microsoft has merged the first version). macOS and Windows can rebuild the website too (`-f site=true`).
 
 Each app only updates itself from a release that has its own platform's file, so releasing one platform first
 doesn't affect the others.
