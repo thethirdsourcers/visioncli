@@ -340,12 +340,20 @@ export const ELEMENTS_JS = `(() => {
     '[role=button], [role=link], [role=tab], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=option], ' +
     '[role=checkbox], [role=switch], [role=radio], [role=combobox], [role=listbox], [role=slider], [role=treeitem]';
   const shortHref = el => typeof el.href === 'string' && el.href ? (${shortHrefFor})(el.href, el.ownerDocument.location.host) : undefined;
+  const inDialog = el => Boolean(el.closest?.('dialog[open], [role=dialog], [role=alertdialog]'));
+  const inView = el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
+  const rank = el => inDialog(el) ? 0 : inView(el) ? 1 : 2;
   const out = []; let n = 0;
   __qa('[data-vcli]').forEach(el => el.removeAttribute('data-vcli')); // ids from an earlier listing
+  const candidates = [];
   for (const el of __qa(sel)) {
     if (!vis(el)) continue;
     if (el.tagName === 'LABEL' && el.querySelector('input, select, textarea, button')) continue; // the control itself is listed
     const text = label(el); if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
+    candidates.push({ el, text, r: rank(el) });
+  }
+  candidates.sort((a, b) => a.r - b.r);
+  for (const { el, text } of candidates) {
     const id = 'e' + (++n); el.setAttribute('data-vcli', id);
     const role = el.getAttribute('role') || '';
     const type = (el.type || '').toLowerCase();
