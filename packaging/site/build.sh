@@ -15,6 +15,23 @@ here=$(dirname "$0")
 VERSION=${TAG#v}
 DL="https://github.com/$GH_REPO/releases/download/$TAG"
 
+# Each platform is released on its own (release-mac/linux/windows.yml), so a release may not have every platform's
+# files: each platform's links (and the apt/dnf repositories) use the newest release, up to TAG, that has them.
+releases=$(gh release list --limit 30 --exclude-drafts --json tagName --jq '.[].tagName' 2>/dev/null || echo "$TAG")
+newest_with() { # <file-name suffix> → tag
+  past=no
+  for t in $releases; do
+    [ "$t" = "$TAG" ] && past=yes
+    [ "$past" = yes ] || continue
+    if gh release view "$t" --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- "$1\$"; then echo "$t"; return; fi
+  done
+  echo "$TAG"
+}
+MAC_TAG=$(newest_with "-macos.dmg")
+WIN_TAG=$(newest_with "-windows-x64.exe")
+LIN_TAG=$(newest_with "-linux-x86_64.AppImage")
+echo "Downloads: macOS $MAC_TAG, Windows $WIN_TAG, Linux $LIN_TAG"
+
 rm -rf "$OUT"
 mkdir -p "$OUT"
 echo "$DOMAIN" > "$OUT/CNAME"
@@ -35,9 +52,9 @@ if [ -n "${PACKAGES_GPG_PRIVATE_KEY:-}" ]; then
   gpg --batch --armor --export "$KEYID" > "$OUT/public.key"
 
   mkdir -p "$OUT/pool/main" "$OUT/rpm"
-  gh release download "$TAG" -p '*.deb' -D "$OUT/pool/main"
+  gh release download "$LIN_TAG" -p '*.deb' -D "$OUT/pool/main"
   # Releases before 0.10.5 have no .rpm files: then only the apt repository is built.
-  gh release download "$TAG" -p '*.rpm' -D "$OUT/rpm" 2>/dev/null || echo "::notice::$TAG has no .rpm files: dnf repository skipped."
+  gh release download "$LIN_TAG" -p '*.rpm' -D "$OUT/rpm" 2>/dev/null || echo "::notice::$LIN_TAG has no .rpm files: dnf repository skipped."
   # A git push rejects files over 100 MB, and gh-pages is a git branch.
   big=$(find "$OUT/pool" "$OUT/rpm" -type f -size +95M)
   if [ -n "$big" ]; then
@@ -100,7 +117,11 @@ else
 fi
 
 # The page: this release's links; the repository instructions only when the repositories exist.
-sed -e "s|@VERSION@|$VERSION|g" -e "s|@TAG@|$TAG|g" -e "s|@DL@|$DL|g" "$here/index.html" > "$OUT/index.html.tmp"
+dl() { echo "https://github.com/$GH_REPO/releases/download/$1"; }
+sed -e "s|@MAC_DL@|$(dl "$MAC_TAG")|g" -e "s|@MAC_VERSION@|${MAC_TAG#v}|g" \
+    -e "s|@WIN_DL@|$(dl "$WIN_TAG")|g" -e "s|@WIN_VERSION@|${WIN_TAG#v}|g" \
+    -e "s|@LIN_DL@|$(dl "$LIN_TAG")|g" -e "s|@LIN_VERSION@|${LIN_TAG#v}|g" \
+    -e "s|@VERSION@|$VERSION|g" -e "s|@TAG@|$TAG|g" -e "s|@DL@|$DL|g" "$here/index.html" > "$OUT/index.html.tmp"
 if [ "$repos" = no ]; then
   sed -i.bak '/<!-- repos -->/,/<!-- \/repos -->/d' "$OUT/index.html.tmp" && rm -f "$OUT/index.html.tmp.bak"
 fi

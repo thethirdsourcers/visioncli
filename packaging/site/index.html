@@ -154,7 +154,7 @@
 
     <div class="os" id="macos">
       <h3>macOS 13 or later</h3>
-      <div class="downloads"><a href="@DL@/VisionCLI-@VERSION@-macos.dmg">Download .dmg</a></div>
+      <div class="downloads"><a href="@MAC_DL@/VisionCLI-@MAC_VERSION@-macos.dmg">Download .dmg</a></div>
       <pre>brew install --cask thethirdsourcers/tap/visioncli</pre>
       <p class="note">VisionCLI isn't notarized by Apple yet, so macOS asks before the first launch: System Settings → Privacy &amp; Security → <b>Open Anyway</b>, or run <code>xattr -dr com.apple.quarantine /Applications/VisionCLI.app</code>.</p>
     </div>
@@ -162,8 +162,8 @@
     <div class="os" id="windows">
       <h3>Windows 10 / 11 (x64 and Arm)</h3>
       <div class="downloads">
-        <a href="@DL@/VisionCLI-@VERSION@-windows-x64.exe">Installer x64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-windows-arm64.exe">Installer Arm64</a>
+        <a href="@WIN_DL@/VisionCLI-@WIN_VERSION@-windows-x64.exe">Installer x64</a>
+        <a href="@WIN_DL@/VisionCLI-@WIN_VERSION@-windows-arm64.exe">Installer Arm64</a>
       </div>
       <pre>winget install TheThirdSourcers.VisionCLI</pre>
       <p class="note">Installs for your user only, no admin rights.</p>
@@ -172,12 +172,12 @@
     <div class="os" id="linux">
       <h3>Linux (x86_64 and arm64)</h3>
       <div class="downloads">
-        <a href="@DL@/VisionCLI-@VERSION@-linux-x86_64.AppImage">AppImage x86_64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-linux-arm64.AppImage">AppImage arm64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-linux-amd64.deb">.deb amd64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-linux-arm64.deb">.deb arm64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-linux-x86_64.rpm">.rpm x86_64</a>
-        <a href="@DL@/VisionCLI-@VERSION@-linux-aarch64.rpm">.rpm aarch64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-x86_64.AppImage">AppImage x86_64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-arm64.AppImage">AppImage arm64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-amd64.deb">.deb amd64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-arm64.deb">.deb arm64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-x86_64.rpm">.rpm x86_64</a>
+        <a href="@LIN_DL@/VisionCLI-@LIN_VERSION@-linux-aarch64.rpm">.rpm aarch64</a>
       </div>
 <!-- repos -->
       <p><b>Debian / Ubuntu</b> (apt repository, updates with the system):</p>
@@ -200,7 +200,7 @@ sudo dnf install visioncli-linux</pre>
     <div class="os">
       <h3>Check a download</h3>
       <p>Every file is listed in <a href="@DL@/SHA256SUMS.txt">SHA256SUMS.txt</a> and carries a build provenance attestation from the GitHub workflow that built it:</p>
-      <pre>gh attestation verify VisionCLI-@VERSION@-macos.dmg -R thethirdsourcers/visioncli</pre>
+      <pre>gh attestation verify VisionCLI-@MAC_VERSION@-macos.dmg -R thethirdsourcers/visioncli</pre>
     </div>
   </section>
 
@@ -213,10 +213,10 @@ sudo dnf install visioncli-linux</pre>
 <script>
 // The primary button downloads for the visitor's system.
 (() => {
-  const ua = navigator.userAgent, dl = "@DL@", v = "@VERSION@", a = document.getElementById("primary");
+  const ua = navigator.userAgent, a = document.getElementById("primary");
   const arm = /arm|aarch64/i.test(navigator.userAgentData?.platform ?? "") || /aarch64|arm64/i.test(ua);
-  if (/Mac/i.test(ua) && !/iPhone|iPad/.test(ua)) { a.href = `${dl}/VisionCLI-${v}-macos.dmg`; a.textContent = "Download for macOS"; }
-  else if (/Windows/i.test(ua)) { a.href = `${dl}/VisionCLI-${v}-windows-${arm ? "arm64" : "x64"}.exe`; a.textContent = "Download for Windows"; }
+  if (/Mac/i.test(ua) && !/iPhone|iPad/.test(ua)) { a.href = "@MAC_DL@/VisionCLI-@MAC_VERSION@-macos.dmg"; a.textContent = "Download for macOS"; }
+  else if (/Windows/i.test(ua)) { a.href = `@WIN_DL@/VisionCLI-@WIN_VERSION@-windows-${arm ? "arm64" : "x64"}.exe`; a.textContent = "Download for Windows"; }
   else if (/Linux/i.test(ua) && !/Android/i.test(ua)) { a.href = "#linux"; a.textContent = "Download for Linux"; }
 })();
 
