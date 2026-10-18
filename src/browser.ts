@@ -341,8 +341,19 @@ const FRAMES = `const __docs = () => { const out = [document];
     for (let i = 0; i < out.length && out.length < 40; i++) for (const f of out[i].querySelectorAll('iframe, frame')) {
       try { if (f.contentDocument && f.contentDocument.documentElement) out.push(f.contentDocument); } catch (e) {} }
     return out; };
-  const __qa = sel => __docs().flatMap(d => [...d.querySelectorAll(sel)]);
-  const __q = sel => { for (const d of __docs()) { const e = d.querySelector(sel); if (e) return e; } return null; };
+  // Every searchable root: the documents plus the open shadow roots inside them (web components: Shoelace, Lit,
+  // Salesforce, YouTube…), roots in roots included.
+  let __rootList = null; // found once per script (a big page has thousands of elements to check)
+  const __roots = () => { if (__rootList) return __rootList; const out = __rootList = [];
+    for (const d of __docs()) { out.push(d);
+      for (let i = out.length - 1; i < out.length && out.length < 400; i++)
+        for (const el of out[i].querySelectorAll('*')) if (el.shadowRoot && out.length < 400) out.push(el.shadowRoot); }
+    return out; };
+  const __qa = sel => __roots().flatMap(d => [...d.querySelectorAll(sel)]);
+  const __q = sel => { for (const d of __roots()) { const e = d.querySelector(sel); if (e) return e; } return null; };
+  // Text an element shows through <slot>s (a web component's <button><slot></slot></button> gets its words from the page).
+  const __slotText = el => [...(el.querySelectorAll ? el.querySelectorAll('slot') : [])].flatMap(s => s.assignedNodes({ flatten: true }))
+    .map(n => n.textContent || '').join(' ').replace(/\\s+/g, ' ').trim();
   // The field a <label> stands for: its linked control, else the only text field next to it (labels that aren't linked).
   const __fieldFor = l => { if (l.control) return l.control; const inner = l.querySelector('input, textarea, select'); if (inner) return inner;
     let host = l.parentElement;
@@ -379,8 +390,10 @@ export const ELEMENTS_JS = `(() => {
   // Form controls are named by their <label> (minus the control's own text, e.g. a select's options).
   const labelText = el => { const l = el.labels?.[0]; if (!l) return ''; const c = l.cloneNode(true);
     c.querySelectorAll('select, input, textarea').forEach(x => x.remove()); return c.innerText || c.textContent || ''; };
-  const label = el => ((/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) ? el.getAttribute('aria-label') || labelText(el) : '') ||
-    el.innerText || (el.type === 'checkbox' || el.type === 'radio' ? '' : el.value) || el.getAttribute('aria-label') || el.getAttribute('title') ||
+  // Inside a web component, the component itself carries the name (<sl-input label="Name">, aria-label on the host).
+  const hostName = el => { const h = el.getRootNode && el.getRootNode().host; return h ? h.getAttribute('label') || h.getAttribute('aria-label') || h.getAttribute('placeholder') || '' : ''; };
+  const label = el => ((/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) ? el.getAttribute('aria-label') || labelText(el) || hostName(el) : '') ||
+    el.innerText || __slotText(el) || (el.type === 'checkbox' || el.type === 'radio' ? '' : el.value) || el.getAttribute('aria-label') || el.getAttribute('title') ||
     el.getAttribute('placeholder') || el.getAttribute('alt') || el.name || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
   const sel = 'a[href], button, input, textarea, select, label, summary, [onclick], [aria-haspopup], [contenteditable=true], ' +
     '[role=button], [role=link], [role=tab], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=option], ' +
@@ -556,7 +569,7 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     if (!el) {
       const want = ${JSON.stringify(target.toLowerCase())};
       // The best match: exact text, then starting with it, then containing it ("Use" means the Use tab, not "Users").
-      const name = e => (e.innerText || e.value || e.getAttribute('aria-label') || e.getAttribute('title') || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+      const name = e => (e.innerText || __slotText(e) || e.value || e.getAttribute('aria-label') || e.getAttribute('title') || '').replace(/\\s+/g, ' ').toLowerCase().trim();
       const seen = e => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
       const all = [...__qa('[data-vcli], a, button, label, [role=button], [role=link], [role=tab], [role=option], [role=menuitem], [role=checkbox], [role=switch], [role=radio], [role=combobox], [aria-haspopup], input[type=submit], summary')].filter(seen);
       el = all.find(e => name(e) === want) || all.find(e => name(e).startsWith(want)) || all.find(e => name(e).includes(want));
@@ -564,7 +577,7 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     if (!el) return 'NOT_FOUND';
     if (el.tagName === 'SELECT') return 'USE_SELECT';
     ${PRESS_LIB}
-    const label = (el.labels?.[0]?.innerText || el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.value || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 80);
+    const label = (el.labels?.[0]?.innerText || el.innerText || __slotText(el) || el.getAttribute('aria-label') || el.getAttribute('title') || el.value || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 80);
     el.scrollIntoView({ block: 'center' });
     ${ghostOn() ? `${GHOST_LIB}
     const r = __rect(el);
@@ -696,7 +709,7 @@ export async function select(target: string, option: string, b?: BrowserName): P
     window.__vcliPress(el);
     // A search box (react-select, MUI Autocomplete…): its options may only show after typing.
     const input = el.tagName === 'INPUT' ? el : el.querySelector('input');
-    return input && (input.getAttribute('aria-autocomplete') || 'list') !== 'none' && input.type !== 'checkbox' ? 'OPENED_SEARCH' : 'OPENED';
+    return input && !input.readOnly && (input.getAttribute('aria-autocomplete') || 'list') !== 'none' && input.type !== 'checkbox' ? 'OPENED_SEARCH' : 'OPENED';
   })()`, b);
   if (first === "NOT_FOUND") throw new Error(`No element "${target}". Call browser_elements again.`);
   if (first.startsWith("NO_OPTION:")) throw new Error(`No option "${option}". Options: ${first.slice(10)}`);
