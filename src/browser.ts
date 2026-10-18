@@ -474,7 +474,9 @@ export const ELEMENTS_JS = `(() => {
     let kind = el.tagName === 'A' ? 'link' : el.tagName === 'SELECT' ? 'dropdown' :
       ['checkbox', 'radio'].includes(type) || ['checkbox', 'switch', 'radio', 'menuitemcheckbox', 'menuitemradio'].includes(role) ? 'toggle' :
       // A text box with suggestions (GitHub's filter, a site search) is still a field you type into.
-      role === 'combobox' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && (el.getAttribute('aria-autocomplete') || 'list') !== 'none' && !el.readOnly ? 'field:combobox' :
+      // (react-select's typing box is a few pixels wide inside its dropdown: that's still a dropdown).
+      role === 'combobox' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && (el.getAttribute('aria-autocomplete') || 'list') !== 'none' && !el.readOnly &&
+        el.getBoundingClientRect().width >= 40 ? 'field:combobox' :
       role === 'combobox' || role === 'listbox' || el.hasAttribute('aria-haspopup') ? 'dropdown' :
       role === 'option' ? 'option' : role === 'slider' ? 'slider' :
       (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? 'field:' + (type || 'text') :
