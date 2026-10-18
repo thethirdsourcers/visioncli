@@ -218,6 +218,30 @@ async function pageState(browser: BrowserName): Promise<PageState | null> {
   try { return JSON.parse(await js(PAGE_STATE, browser)); } catch { return null; }
 }
 
+/** Watches the page for changes (kept in the page between calls), so settle() can tell when it's quiet. */
+const WATCH = `(() => { if (!window.__vcliQuiet) { window.__vcliQuiet = { at: Date.now() };
+    new MutationObserver(() => { window.__vcliQuiet.at = Date.now(); }).observe(document, { subtree: true, childList: true, characterData: true }); }
+  return JSON.stringify({ ready: document.readyState, href: location.href, doc: performance.timeOrigin, quietMs: Date.now() - window.__vcliQuiet.at }); })()`;
+
+/**
+ * After an action that may navigate: a new document loads, or a single-page app (GitHub, Gmail, React Router) swaps
+ * the content without one. Waits until the page has stopped changing: quiet for 300 ms, loaded if it's a new
+ * document; at most `ms`. A click that changes nothing costs about 0.3 s.
+ */
+async function settle(browser: BrowserName, before: PageState | null, ms = 4000) {
+  if (process.env.VISIONCLI_JS_DUMP) return;
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 120));
+    let s: (PageState & { quietMs: number }) | null = null;
+    try { s = JSON.parse(await js(WATCH, browser)); } catch {}
+    if (!s) continue; // between documents
+    const moved = !before || s.doc !== before.doc || s.href !== before.href;
+    if (s.ready !== "complete") continue;
+    if (s.quietMs >= (moved ? 400 : 300)) return;
+  }
+}
+
 /** True once a new document (not `previousDoc`, the one shown before) from `url`'s site has fully loaded. Every
  *  document has its own performance.timeOrigin, so a new page on the same site counts and the old one doesn't. */
 export function loadedFrom(state: { ready: string; href: string; doc?: number }, url: string, previousDoc?: number): boolean {
@@ -438,17 +462,19 @@ export const ELEMENTS_JS = `(() => {
     }
     return '';
   };
-  const out = []; let n = 0;
+  const out = [], found = []; let n = 0; // candidates with temporary ids; the best 150 get e1… at the end
   __qa('[data-vcli]').forEach(el => el.removeAttribute('data-vcli')); // ids from an earlier listing
   for (const el of __qa(sel)) {
     if (!vis(el) || isAd(el)) continue;
     if (el.tagName === 'LABEL' && el.querySelector('input, select, textarea, button')) continue; // the control itself is listed
     const text = label(el); if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
-    const id = 'e' + (++n); el.setAttribute('data-vcli', id);
+    const id = 'p' + (++n); el.setAttribute('data-vcli', id); found.push(el);
     const role = el.getAttribute('role') || '';
     const type = (el.type || '').toLowerCase();
     let kind = el.tagName === 'A' ? 'link' : el.tagName === 'SELECT' ? 'dropdown' :
       ['checkbox', 'radio'].includes(type) || ['checkbox', 'switch', 'radio', 'menuitemcheckbox', 'menuitemradio'].includes(role) ? 'toggle' :
+      // A text box with suggestions (GitHub's filter, a site search) is still a field you type into.
+      role === 'combobox' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && (el.getAttribute('aria-autocomplete') || 'list') !== 'none' && !el.readOnly ? 'field:combobox' :
       role === 'combobox' || role === 'listbox' || el.hasAttribute('aria-haspopup') ? 'dropdown' :
       role === 'option' ? 'option' : role === 'slider' ? 'slider' :
       (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? 'field:' + (type || 'text') :
@@ -470,22 +496,22 @@ export const ELEMENTS_JS = `(() => {
       item.options = [...el.options].slice(0, 25).map(o => o.text.trim());
     }
     out.push(item);
-    if (out.length >= 150) break;
+    if (out.length >= 600) break;
   }
   // Clickable things that aren't buttons: icons made of a span/svg with a click handler (a table's edit and delete
   // icons), named by their tooltip or label, and sortable table headers. Clickable means a pointer cursor (or a sort).
   for (const el of __qa('[draggable=true], [class*=drag], [id*=drag]')) {
-    if (out.length >= 150) break;
+    if (out.length >= 600) break;
     if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || !vis(el) || isAd(el)) continue;
     const cur = el.ownerDocument.defaultView.getComputedStyle(el).cursor;
     if (el.getAttribute('draggable') !== 'true' && !/move|grab/.test(cur) && !/ui-draggable/.test(el.className)) continue;
     const text = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
     if (!text) continue;
-    const id = 'e' + (++n); el.setAttribute('data-vcli', id);
+    const id = 'p' + (++n); el.setAttribute('data-vcli', id); found.push(el);
     out.push({ id, kind: 'draggable', text });
   }
   for (const el of __qa('[title], [aria-label], th, [aria-sort]')) {
-    if (out.length >= 150) break;
+    if (out.length >= 600) break;
     if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || el.querySelector('[data-vcli]') || !vis(el) || isAd(el)) continue;
     const header = el.tagName === 'TH' || el.hasAttribute('aria-sort');
     // Sortable headers: a sort library marks the header or its table (tablesorter, DataTables, AG Grid…).
@@ -493,12 +519,21 @@ export const ELEMENTS_JS = `(() => {
     if (el.ownerDocument.defaultView.getComputedStyle(el).cursor !== 'pointer' && !sortable) continue;
     const text = ((header ? el.innerText : '') || el.getAttribute('title') || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
     if (!text) continue;
-    const id = 'e' + (++n); el.setAttribute('data-vcli', id);
+    const id = 'p' + (++n); el.setAttribute('data-vcli', id); found.push(el);
     const item = { id, kind: header ? 'header' : 'button', text };
     if (el.hasAttribute('aria-sort')) item.state = 'sorted ' + el.getAttribute('aria-sort');
     out.push(item);
   }
-  return JSON.stringify(out);
+  // Rank before cutting to 150: an open dialog's controls first (they're what the user is looking at), then what's on
+  // screen, then the rest, each in page order. Big sidebars no longer push a dialog's fields off the list.
+  const dialog = __qa('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]').filter(vis).pop();
+  const rank = el => { if (dialog && (dialog.contains(el) || (el.getRootNode().host && dialog.contains(el.getRootNode().host)))) return 0;
+    const r = __rect(el); return r.top + r.height > 0 && r.top < innerHeight && r.left < innerWidth && r.left + r.width > 0 ? 1 : 2; };
+  const order = out.map((item, i) => ({ item, el: found[i], i, r: rank(found[i]) })).sort((a, b) => a.r - b.r || a.i - b.i);
+  const kept = order.slice(0, 150);
+  order.slice(150).forEach(o => o.el.removeAttribute('data-vcli'));
+  kept.forEach((o, k) => { o.item.id = 'e' + (k + 1); o.el.setAttribute('data-vcli', o.item.id); });
+  return JSON.stringify(kept.map(o => o.item));
 })()`;
 
 export async function elements(b?: BrowserName): Promise<Element[]> {
@@ -585,9 +620,13 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     window.__vcliGhost(r.left + Math.min(r.width / 2, 48), r.top + r.height / 2, null);` : "window.__vcliPress(el);"}
     return label;
   })()`;
-  const r = await js(code, b);
+  const browser = b ?? (await pick());
+  // Start watching before the click, so a single-page app's swap counts as a change.
+  const before = await js(WATCH, browser).then((x) => JSON.parse(x) as PageState, () => null);
+  const r = await js(code, browser);
   if (r === "NOT_FOUND") throw new Error(`No clickable element matching "${target}".`);
   if (r === "USE_SELECT") throw new Error(`"${target}" is a native dropdown: use browser_select with the option text instead of clicking it.`);
+  await settle(browser, before);
   return r;
 }
 
@@ -633,8 +672,11 @@ export async function type(target: string, text: string, submit = false, b?: Bro
     window.__vcliGhost(r.left + 14, r.top + r.height / 2, null);` : "el.focus(); finish();"}
     return 'ok';
   })()`;
-  const r = await js(code, b);
+  const browser = b ?? (await pick());
+  const before = submit ? await js(WATCH, browser).then((x) => JSON.parse(x) as PageState, () => null) : null;
+  const r = await js(code, browser);
   if (r === "NOT_FOUND") throw new Error(`No text field "${target}".`);
+  if (submit) await settle(browser, before);
   return r;
 }
 
