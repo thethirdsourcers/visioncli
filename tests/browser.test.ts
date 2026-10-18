@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { ELEMENTS_JS, fill, loadedFrom, read, sameUrl, select, serial, shortHrefFor, type, zipTabs } from "../src/browser.js";
+import { ELEMENTS_JS, fill, hover, loadedFrom, read, sameUrl, select, serial, shortHrefFor, type, zipTabs } from "../src/browser.js";
 
 describe("shortHrefFor", () => {
   test("same host: just path + short query", () => {
@@ -120,6 +120,11 @@ describe("loadedFrom", () => {
     assert.ok(!loadedFrom({ ready: "interactive", href: "https://en.wikipedia.org/" }, "https://en.wikipedia.org/"));
     assert.ok(!loadedFrom({ ready: "complete", href: "https://news.ycombinator.com/" }, "https://en.wikipedia.org/"));
   });
+  test("a new page on the same site: only once the document is a new one", () => {
+    const url = "https://the-internet.herokuapp.com/dynamic_controls";
+    assert.ok(!loadedFrom({ ready: "complete", href: "https://the-internet.herokuapp.com/tables", doc: 100 }, url, 100), "still the old page");
+    assert.ok(loadedFrom({ ready: "complete", href: url, doc: 200 }, url, 100));
+  });
 });
 
 describe("page scripts", () => {
@@ -136,6 +141,7 @@ describe("page scripts", () => {
     await dump(() => type("e3", "x", true, "Google Chrome"));
     await dump(() => select("e5", "Maths", "Google Chrome"));
     await dump(() => fill([{ target: "e3", value: "Grace" }, { target: "e9", value: true }, { target: "e5", value: "Maths" }], "Google Chrome"));
+    await dump(() => hover("e4", "Google Chrome"));
     scripts.push(ELEMENTS_JS);
     assert.ok(scripts.length >= 6);
     for (const s of scripts) assert.doesNotThrow(() => new Function(`return ${s}`), s.slice(0, 120));

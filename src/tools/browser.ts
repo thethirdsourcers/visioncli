@@ -129,6 +129,17 @@ export function register(server: McpServer) {
   );
 
   server.registerTool(
+    "browser_hover",
+    {
+      title: "Hover over an element",
+      description: "Hover over an element (id from browser_elements) to show what appears on hover: menus, captions, tooltips. " +
+        "Then call browser_elements to see and click what appeared.",
+      inputSchema: { target: z.string().describe("Element id like e12, or its visible text / image description") },
+    },
+    wrap(async ({ target }) => `Hovering over “${await browser.hover(target)}”`),
+  );
+
+  server.registerTool(
     "browser_fill",
     {
       title: "Fill in a form",

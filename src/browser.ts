@@ -202,26 +202,38 @@ export const sameUrl = (a: string, b: string) => {
 export async function open(url: string, newTab = true, b?: BrowserName, knownTabs?: Tab[]): Promise<string> {
   const browser = b ?? (await pick());
   if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;
+  // The document showing before, so the wait below can tell the new page apart (same site included).
+  const before = await pageState(browser);
   const said = await openTab(url, newTab, browser, knownTabs);
-  // Wait for the page, so the next read or click sees it (not the page that was there before).
-  await waitForLoad(url, browser);
+  // Wait for the new page, so the next read or click sees it (not the page that was there before). A tab that was
+  // already showing it is loaded.
+  if (!said.startsWith("Switched")) await waitForLoad(url, browser, before?.doc);
   return said;
 }
 
-/** True once a page from `url`'s site has loaded in the active tab (redirects within the site count). */
-export function loadedFrom(state: { ready: string; href: string }, url: string): boolean {
+interface PageState { ready: string; href: string; doc: number }
+const PAGE_STATE = `JSON.stringify({ ready: document.readyState, href: location.href, doc: performance.timeOrigin })`;
+async function pageState(browser: BrowserName): Promise<PageState | null> {
+  if (process.env.VISIONCLI_JS_DUMP) return null;
+  try { return JSON.parse(await js(PAGE_STATE, browser)); } catch { return null; }
+}
+
+/** True once a new document (not `previousDoc`, the one shown before) from `url`'s site has fully loaded. Every
+ *  document has its own performance.timeOrigin, so a new page on the same site counts and the old one doesn't. */
+export function loadedFrom(state: { ready: string; href: string; doc?: number }, url: string, previousDoc?: number): boolean {
   if (state.ready !== "complete") return false;
+  if (previousDoc !== undefined && state.doc === previousDoc) return false;
   try { return new URL(state.href).host.replace(/^www\./, "") === new URL(url).host.replace(/^www\./, ""); } catch { return false; }
 }
 
-/** Polls the active tab until it shows `url`'s site, fully loaded (up to `ms`; slow pages just carry on). */
-async function waitForLoad(url: string, browser: BrowserName, ms = 8000) {
+/** Polls the active tab until it shows a new, fully loaded page from `url`'s site (up to `ms`; slow pages carry on). */
+async function waitForLoad(url: string, browser: BrowserName, previousDoc?: number, ms = 8000) {
   if (!/^https?:/i.test(url) || process.env.VISIONCLI_JS_DUMP) return;
   const until = Date.now() + ms;
   while (Date.now() < until) {
-    const raw = await js(`JSON.stringify({ ready: document.readyState, href: location.href })`, browser).catch(() => "");
-    try { if (loadedFrom(JSON.parse(raw), url)) return; } catch {}
-    await new Promise((r) => setTimeout(r, 150));
+    const s = await pageState(browser);
+    if (s && loadedFrom(s, url, previousDoc)) return;
+    await new Promise((r) => setTimeout(r, 120));
   }
 }
 
@@ -413,7 +425,8 @@ export const ELEMENTS_JS = `(() => {
     const item = { id, kind, text: text || '(empty ' + kind + ')', href: shortHref(el) };
     if (kind === 'toggle') item.state = (el.checked ?? (el.getAttribute('aria-checked') === 'true')) ? 'on' : 'off';
     if (el.hasAttribute('aria-expanded')) item.expanded = el.getAttribute('aria-expanded') === 'true';
-    if (kind === 'dropdown' && el.tagName !== 'SELECT') {
+    // Only pickers have a chosen value (a combobox, a listbox popup); a menu button (File, Edit…) doesn't.
+    if (kind === 'dropdown' && el.tagName !== 'SELECT' && (role === 'combobox' || el.getAttribute('aria-haspopup') === 'listbox')) {
       const v = shownValue(el);
       if (v !== undefined) item.value = v || '(none)';
     }
@@ -425,16 +438,21 @@ export const ELEMENTS_JS = `(() => {
     out.push(item);
     if (out.length >= 150) break;
   }
-  // Icon buttons made of a span/svg with a click handler (a table's edit and delete icons): named by their tooltip or
-  // label, clickable by their pointer cursor.
-  for (const el of __qa('[title], [aria-label]')) {
+  // Clickable things that aren't buttons: icons made of a span/svg with a click handler (a table's edit and delete
+  // icons), named by their tooltip or label, and sortable table headers. Clickable means a pointer cursor (or a sort).
+  for (const el of __qa('[title], [aria-label], th, [aria-sort]')) {
     if (out.length >= 150) break;
     if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || el.querySelector('[data-vcli]') || !vis(el) || isAd(el)) continue;
-    if (el.ownerDocument.defaultView.getComputedStyle(el).cursor !== 'pointer') continue;
-    const text = (el.getAttribute('title') || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
+    const header = el.tagName === 'TH' || el.hasAttribute('aria-sort');
+    // Sortable headers: a sort library marks the header or its table (tablesorter, DataTables, AG Grid…).
+    const sortable = el.hasAttribute('aria-sort') || (header && (/sort|header/i.test(el.className) || /sort/i.test(el.closest('table')?.className || '')));
+    if (el.ownerDocument.defaultView.getComputedStyle(el).cursor !== 'pointer' && !sortable) continue;
+    const text = ((header ? el.innerText : '') || el.getAttribute('title') || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
     if (!text) continue;
     const id = 'e' + (++n); el.setAttribute('data-vcli', id);
-    out.push({ id, kind: 'button', text });
+    const item = { id, kind: header ? 'header' : 'button', text };
+    if (el.hasAttribute('aria-sort')) item.state = 'sorted ' + el.getAttribute('aria-sort');
+    out.push(item);
   }
   return JSON.stringify(out);
 })()`;
@@ -532,8 +550,17 @@ export async function type(target: string, text: string, submit = false, b?: Bro
     let el = __q('[data-vcli=${JSON.stringify(target)}]') || document.activeElement;
     while (el && el.contentDocument && el.contentDocument.activeElement) el = el.contentDocument.activeElement; // focus inside a frame
     if (el && el.tagName === 'LABEL') el = __fieldFor(el) || el; // a label means its field
-    if (!el || !('value' in el)) return 'NOT_FOUND';
     const text = ${JSON.stringify(text)};
+    if (el && el.isContentEditable) {
+      // A rich-text editor (TinyMCE, Quill, ProseMirror, Gmail…): replace its text the way typing does, so the editor
+      // keeps its own state; plain text if the browser won't insert.
+      el.focus();
+      const d = el.ownerDocument, sel = d.defaultView.getSelection(), range = d.createRange();
+      range.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(range);
+      if (!d.execCommand('insertText', false, text)) { el.innerText = text; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      return 'ok';
+    }
+    if (!el || !('value' in el)) return 'NOT_FOUND';
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
     const set = v => { setter ? setter.call(el, v) : (el.value = v); el.dispatchEvent(new Event('input', { bubbles: true })); };
     // A search-as-you-type dropdown needs its text to stay (browser_select picks from the suggestions next).
@@ -734,4 +761,52 @@ export async function fill(fields: FillField[], b?: BrowserName): Promise<string
     } else out.push(`${target}: ${r}`);
   }
   return out;
+}
+
+/**
+ * Hover over an element: menus and captions that show on hover. Script-driven ones get the mouse-over events; CSS
+ * :hover ones get a copy of the page's :hover rules that also applies to a marker class, put on the element and its
+ * parents (a real hover covers them too). The pointer itself doesn't move. The next hover moves it to another element.
+ */
+export async function hover(target: string, b?: BrowserName): Promise<string> {
+  const r = await js(`(() => {
+    ${FRAMES}
+    let el = __q('[data-vcli=${JSON.stringify(target)}]');
+    if (!el) {
+      // By text: the smallest visible element whose text, image description, label or tooltip has it.
+      const want = ${JSON.stringify(target.toLowerCase())};
+      const name = e => (e.getAttribute('alt') || e.getAttribute('aria-label') || e.getAttribute('title') || (e.children.length < 4 ? e.innerText : '') || '').toLowerCase();
+      el = __qa('img[alt], [aria-label], [title], a, button, li, span, div, td, th').filter(e => { const r = e.getBoundingClientRect(); return r.width > 2 && r.height > 2 && name(e).includes(want); })
+        .sort((a, b) => a.getBoundingClientRect().width * a.getBoundingClientRect().height - b.getBoundingClientRect().width * b.getBoundingClientRect().height)[0];
+    }
+    if (!el) return 'NOT_FOUND';
+    const doc = el.ownerDocument;
+    if (!doc.getElementById('__vcli_hover')) {
+      const rules = [];
+      for (const sheet of [...doc.styleSheets]) {
+        let list; try { list = sheet.cssRules; } catch (e) { continue; } // another site's stylesheet: can't read it
+        const walk = rs => { for (const r of rs) {
+          if (r.cssRules && !r.selectorText) { walk(r.cssRules); continue; } // @media blocks
+          if (r.selectorText && r.selectorText.includes(':hover')) rules.push(r.cssText.split(r.selectorText).join(r.selectorText.replace(/:hover/g, '.__vcliHover')));
+        } };
+        walk(list);
+      }
+      const style = doc.createElement('style'); style.id = '__vcli_hover'; style.textContent = rules.join('\\n');
+      doc.head.appendChild(style);
+    }
+    doc.querySelectorAll('.__vcliHover').forEach(e => e.classList.remove('__vcliHover'));
+    for (let e = el; e && e.classList; e = e.parentElement) e.classList.add('__vcliHover');
+    el.scrollIntoView({ block: 'center' });
+    const r = el.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, view: doc.defaultView, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+    const P = doc.defaultView.PointerEvent || MouseEvent;
+    el.dispatchEvent(new P('pointerover', { ...o, pointerId: 1, pointerType: 'mouse' }));
+    el.dispatchEvent(new P('pointerenter', { ...o, bubbles: false, pointerId: 1, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseover', o));
+    el.dispatchEvent(new MouseEvent('mouseenter', { ...o, bubbles: false }));
+    el.dispatchEvent(new MouseEvent('mousemove', o));
+    return (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 60);
+  })()`, b);
+  if (r === "NOT_FOUND") throw new Error(`No element "${target}". Call browser_elements again.`);
+  return r;
 }
