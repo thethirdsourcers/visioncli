@@ -646,7 +646,9 @@ export async function scroll(where: "down" | "up" | "top" | "bottom", b?: Browse
 export async function read(maxChars = 6000, b?: BrowserName): Promise<string> {
   const code = `(() => {
     ${FRAMES}
-    const main = document.querySelector('main, article, [role=main]') || document.body;
+    // The main content: <main>, else the one <article> (a list of articles, like a shop's product cards, is the page itself).
+    const arts = document.querySelectorAll('article');
+    const main = document.querySelector('main, [role=main]') || (arts.length === 1 ? arts[0] : null) || document.body;
     // Long option lists (a date picker's 200 years, every country) are noise here: browser_elements lists their options.
     const long = __qa('select, [role=listbox]').filter(l => (l.options || l.children).length > 15 && l.style.display !== 'none');
     long.forEach(l => { l.dataset.vcliDisplay = l.style.display; l.style.display = 'none'; });
