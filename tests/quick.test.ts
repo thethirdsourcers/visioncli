@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Element, Tab } from "../src/browser.js";
-import { MIN_INTENT, MIN_TARGET, phrase, plan, quickQuestions, readIntent, siteUrl } from "../src/quick.js";
+import { browserShare, MIN_BROWSER, MIN_INTENT, MIN_SAFE_INTENT, MIN_TARGET, phrase, plan, quickQuestions, readIntent, siteUrl } from "../src/quick.js";
 
 describe("phrase", () => {
   const cases: [string, string][] = [
@@ -43,22 +43,40 @@ describe("siteUrl", () => {
 });
 
 describe("readIntent", () => {
+  const ans = (choice: string, confidence: number, probabilities?: Record<string, number>) =>
+    ({ intent: { type: "choice", choice, confidence, probabilities } });
+
   test("no answer means ask Claude", () => {
     assert.deepEqual(readIntent({}), { intent: "ask_claude", confidence: 0, fallthrough: "needs Claude" });
   });
 
-  test("ask_claude falls through even when confident", () => {
-    assert.equal(readIntent({ intent: { type: "choice", choice: "ask_claude", confidence: 1 } }).fallthrough, "needs Claude");
+  test("a confident ask_claude falls through", () => {
+    assert.equal(readIntent(ans("ask_claude", 0.9, { ask_claude: 0.9, click: 0.1 })).fallthrough, "needs Claude");
   });
 
-  test("below MIN_INTENT falls through with the confidence", () => {
-    const r = readIntent({ intent: { type: "choice", choice: "scroll_down", confidence: MIN_INTENT - 0.01 } });
-    assert.equal(r.fallthrough, `unsure (${(MIN_INTENT - 0.01).toFixed(2)})`);
+  test("ask_claude that's mostly browser actions goes to the agent, not Claude", () => {
+    const r = readIntent(ans("ask_claude", 0.4, { ask_claude: 0.4, click: 0.35, browser_task: 0.25 }));
+    assert.equal(r.task, true);
+    assert.equal(r.fallthrough, undefined);
+    assert.equal(readIntent(ans("ask_claude", 0.4, { ask_claude: 0.4, click: 0.6 }), false).fallthrough, "needs Claude", "not with the browser behind");
   });
 
   test("at MIN_INTENT it's handled", () => {
-    const r = readIntent({ intent: { type: "choice", choice: "scroll_down", confidence: MIN_INTENT } });
-    assert.deepEqual(r, { intent: "scroll_down", confidence: MIN_INTENT });
+    assert.deepEqual(readIntent(ans("scroll_down", MIN_INTENT)), { intent: "scroll_down", confidence: MIN_INTENT });
+  });
+
+  test("a fairly likely one-step action still runs; an unsure click goes to the agent", () => {
+    assert.deepEqual(readIntent(ans("open_site", MIN_SAFE_INTENT, { open_site: MIN_SAFE_INTENT, ask_claude: 0.2 })), { intent: "open_site", confidence: MIN_SAFE_INTENT });
+    const click = readIntent(ans("click", 0.5, { click: 0.5, browser_task: 0.3, ask_claude: 0.2 }));
+    assert.equal(click.task, true);
+    const close = readIntent(ans("close_tab", 0.5, { close_tab: 0.5, ask_claude: 0.5 }), true);
+    assert.equal(close.fallthrough, "unsure (0.50)", "closing a tab needs to be sure, and half of it is Claude");
+  });
+
+  test("browserShare: one minus ask_claude, else the top choice", () => {
+    assert.equal(browserShare(ans("click", 0.6, { click: 0.6, ask_claude: 0.25, scroll_down: 0.15 })), 0.75);
+    assert.equal(browserShare(ans("ask_claude", 0.8)), 0.19999999999999996);
+    assert.ok(MIN_BROWSER > 0.5);
   });
 });
 

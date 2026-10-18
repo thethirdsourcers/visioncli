@@ -17,10 +17,12 @@ extension AppDelegate {
         }
         state.question = text
         state.status = withScreen ? "Looking at your screen…" : "Thinking…"
-        guard Settings.quickCommands, QuickCommandFilter.matches(text) else { routeThenAsk(text); return }
+        let browserInFront = QuickCommandFilter.browserBundles.contains(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
+        guard Settings.quickCommands, QuickCommandFilter.matches(text, browserInFront: browserInFront) else { routeThenAsk(text); return }
         // Jev first (fast path for simple browser commands); Claude if it isn't a confident quick action.
         let started = Date()
-        runQuick(text, timeout: 3) { [weak self] result in
+        // Up to 8 s: a slow first Jev answer is retried inside `quick` rather than handed to the assistant.
+        runQuick(text, timeout: 8) { [weak self] result in
             guard let self, self.state.phase == .thinking, self.state.question == text else { return }
             if result?["task"] as? Bool == true { self.runBrowserTask(text); return } // several steps: the Jev agent
             let handled = result?["handled"] as? Bool ?? false

@@ -315,7 +315,7 @@ final class TerminalSession {
         if assistant == .claude {
             command = """
             \(quote(cfg.claude)) --append-system-prompt "$(cat \(quote(promptFile.path)))" \\
-              --allowedTools \(autoAllowedTools.joined(separator: " ")) \(Settings.effort.map { "--effort \($0)" } ?? "") \\
+              --allowedTools \(autoAllowedTools.joined(separator: " ")) --disallowedTools mcp__claude-in-chrome \(Settings.effort.map { "--effort \($0)" } ?? "") \\
               \(Settings.model == "default" ? "" : "--model \(quote(Settings.model))") \\
               \(resume ? "--resume" : "--session-id") \(sessionId)
             """

@@ -85,6 +85,10 @@ func testQuickCommands() {
     check(!QuickCommandFilter.matches("open a b c d e f g h i j k l m n o p q r s t"), "21 words is too long")
     check(QuickCommandFilter.matches("find a stay in Lisbon for 3 nights with a pool and free cancellation, then open it"), "a browser task")
     check(!QuickCommandFilter.matches("open the settings and explain the timeout"), "question words go to the assistant")
+    check(!QuickCommandFilter.matches("create a CV for me"), "\"create\" alone isn't a browser command")
+    check(QuickCommandFilter.matches("create a CV for me", browserInFront: true), "with the browser in front it is")
+    check(QuickCommandFilter.matches("add the blue one to the cart", browserInFront: true), "add to cart in the browser")
+    check(!QuickCommandFilter.matches("why does create fail", browserInFront: true), "questions still go to the assistant")
 }
 
 // MARK: - BrowserTaskText

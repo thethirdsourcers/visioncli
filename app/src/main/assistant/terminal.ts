@@ -358,7 +358,7 @@ export class TerminalSession implements AssistantSession {
     let command: string;
     if (this.cli === "claude") {
       command = `${quote(this.cfg.claude)} --append-system-prompt "$(cat ${quote(promptFile)})" \\
-  --allowedTools ${autoAllowedTools.join(" ")} ${effort ? `--effort ${effort}` : ""} \\
+  --allowedTools ${autoAllowedTools.join(" ")} --disallowedTools mcp__claude-in-chrome ${effort ? `--effort ${effort}` : ""} \\
   ${model === "default" ? "" : `--model ${quote(model)}`} \\
   ${resume ? "--resume" : "--session-id"} ${this._sessionId}`;
     } else if (this.cli === "agy") {
@@ -399,7 +399,7 @@ export class TerminalSession implements AssistantSession {
     const lines: string[] = [];
     let argv: string[];
     if (this.cli === "claude") {
-      argv = [this.cfg.claude, "--append-system-prompt", terminalPrompt.replace(/\s*\n\s*/g, " "), "--allowedTools", ...autoAllowedTools,
+      argv = [this.cfg.claude, "--append-system-prompt", terminalPrompt.replace(/\s*\n\s*/g, " "), "--allowedTools", ...autoAllowedTools, "--disallowedTools", "mcp__claude-in-chrome",
         ...(effort ? ["--effort", effort] : []), ...(model === "default" ? [] : ["--model", model]), resume ? "--resume" : "--session-id", this._sessionId];
     } else if (this.cli === "agy") {
       const agyModel = settings.get("agyModel");

@@ -4,7 +4,9 @@ import { INTEGRATIONS_FILE } from "./config.js";
 
 // Instant voice commands: one Jev (TypeSafe System One) request routes the spoken command and picks its
 // target from candidates code collected (open tabs, clickable elements); code then performs the action.
-// Anything that isn't a confident, simple browser action falls through to Claude.
+// A browser action is always ours: a fairly likely one-step action runs, anything else that's probably about the page
+// goes to the Jev agent (multi-step), and failures are reported here. Only what isn't a browser action (or can't be
+// done without one: the browser isn't in front for a page task) falls through to Claude.
 
 export interface QuickResult {
   handled: boolean;
@@ -80,6 +82,12 @@ export function siteUrl(name: string): string {
 }
 
 export const MIN_INTENT = 0.7;
+/** A one-step action this likely still runs (switch_tab falls back to opening the site): undoing it is one command. */
+export const MIN_SAFE_INTENT = 0.45;
+/** How likely a command must be to concern the browser at all (every intent but ask_claude) for the agent to take it. */
+export const MIN_BROWSER = 0.55;
+const SAFE_INTENTS = new Set(["switch_tab", "open_site", "web_search", "scroll_down", "scroll_up", "scroll_top", "scroll_bottom",
+  "play_pause", "mute", "back", "forward", "reload", "new_tab"]);
 export const MIN_TARGET = 0.55;
 export const MAX_ELEMENTS = 60; // page elements offered to Jev (in page order): enough for a screenful, keeps the request fast
 
@@ -111,13 +119,27 @@ export function quickQuestions(tabList: browser.Tab[], els: browser.Element[], p
   return questions;
 }
 
-/** The intent and whether it's confident and simple enough to handle without Claude (`fallthrough` says why not). */
-export function readIntent(a: Record<string, Answer | undefined>): { intent: string; confidence: number; fallthrough?: string } {
+/** How likely the command is a browser action of any kind: everything but ask_claude. */
+export function browserShare(a: Record<string, Answer | undefined>): number {
+  const p = a.intent?.probabilities;
+  if (p && typeof p.ask_claude === "number") return 1 - p.ask_claude;
+  const c = a.intent?.confidence ?? 0;
+  return a.intent?.choice === "ask_claude" ? 1 - c : c;
+}
+
+/** The intent, and whether to run it, give it to the Jev agent (`task`) or let Claude have it (`fallthrough` says why).
+ *  `pageTasks`: the browser is in front, so the agent can work on the page. */
+export function readIntent(a: Record<string, Answer | undefined>, pageTasks = true): { intent: string; confidence: number; fallthrough?: string; task?: boolean } {
   const intent = a.intent?.choice ?? "ask_claude";
   const confidence = a.intent?.confidence ?? 0;
-  if (intent === "ask_claude") return { intent, confidence, fallthrough: "needs Claude" };
-  if (confidence < MIN_INTENT) return { intent, confidence, fallthrough: `unsure (${confidence.toFixed(2)})` };
-  return { intent, confidence };
+  const share = browserShare(a);
+  // Probably about the page after all (or a browser action Jev isn't sure which of): the agent works it out step by step.
+  const toAgent = pageTasks && share >= MIN_BROWSER;
+  if (intent === "ask_claude") return toAgent ? { intent: "browser_task", confidence: share, task: true } : { intent, confidence, fallthrough: "needs Claude" };
+  if (confidence >= MIN_INTENT) return { intent, confidence };
+  if (confidence >= MIN_SAFE_INTENT && SAFE_INTENTS.has(intent)) return { intent, confidence };
+  if (toAgent) return { intent: "browser_task", confidence: share, task: true };
+  return { intent, confidence, fallthrough: `unsure (${confidence.toFixed(2)})` };
 }
 
 /** What a confident intent does, with its target resolved (a weak target falls back or falls through). */
@@ -195,15 +217,18 @@ export async function quick(utterance: string): Promise<QuickResult> {
 
   let a: Record<string, Answer>;
   try {
-    a = await jev(state, questions, key);
+    // One retry: a slow first answer after idle shouldn't hand a browser command to Claude.
+    a = await jev(state, questions, key).catch(() => jev(state, questions, key));
   } catch (err) {
-    return { handled: false, reason: String((err as Error).message ?? err), ms: Date.now() - started };
+    // The command passed the browser-command filter: say what went wrong instead of quietly asking Claude.
+    return { handled: true, reason: "TypeSafe unreachable", message: `Browser control couldn't reach TypeSafe: ${String((err as Error).message ?? err).slice(0, 120)}`, ms: Date.now() - started };
   }
-  const { intent, confidence: conf, fallthrough: why } = readIntent(a);
+  const { intent, confidence: conf, fallthrough: why, task } = readIntent(a, inFront);
   const base = { intent, confidence: conf, ms: 0 };
   const fallthrough = (reason: string): QuickResult => ({ handled: false, ...base, reason, ms: Date.now() - started });
+  const toAgent = (reason: string): QuickResult => ({ handled: false, ...base, task: true, reason, ms: Date.now() - started });
   if (why) return fallthrough(why);
-  if (intent === "browser_task") return { handled: false, ...base, task: true, reason: "browser task", ms: Date.now() - started };
+  if (task || intent === "browser_task") return toAgent("browser task");
   if (process.env.VISIONCLI_QUICK_DRY === "1") {
     const target = intent === "switch_tab" ? a.tab : intent === "click" ? a.element : undefined;
     const label = target?.choice && target.choice !== "none"
@@ -217,7 +242,8 @@ export async function quick(utterance: string): Promise<QuickResult> {
     let message = "";
     switch (p.do) {
       case "fallthrough":
-        return fallthrough(p.reason);
+        // A click whose target Jev couldn't pick from the visible elements: the agent looks at the whole page.
+        return inFront ? toAgent(p.reason) : fallthrough(p.reason);
       case "switch_tab":
         await browser.switchTo(p.tab, b);
         message = `Switched to “${tabList.find((x) => x.id === p.tab)?.title ?? p.tab}”`;
@@ -240,14 +266,12 @@ export async function quick(utterance: string): Promise<QuickResult> {
       case "play_pause": {
         const r = await browser.js(`(() => { const m = [...document.querySelectorAll('video, audio')].sort((a, b) => (b.offsetWidth * b.offsetHeight) - (a.offsetWidth * a.offsetHeight))[0];
           if (!m) return 'none'; if (m.paused) { m.play(); return 'Playing'; } m.pause(); return 'Paused'; })()`, b);
-        if (r === "none") return fallthrough("no video or audio on the page");
-        message = r;
+        message = r === "none" ? "No video or audio on this page" : r;
         break;
       }
       case "mute": {
         const r = await browser.js(`(() => { const m = document.querySelector('video, audio'); if (!m) return 'none'; m.muted = !m.muted; return m.muted ? 'Muted' : 'Unmuted'; })()`, b);
-        if (r === "none") return fallthrough("no video or audio on the page");
-        message = r;
+        message = r === "none" ? "No video or audio on this page" : r;
         break;
       }
       case "navigate":

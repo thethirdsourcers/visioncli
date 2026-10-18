@@ -33,9 +33,20 @@ export const QuickCommandFilter = {
                   "take", "visit", "launch", "navigate", "select", "choose", "fill", "enter", "submit",
                   "zoom", "new", "look", "watch", "download", "sign", "log"]),
 
+  /** More verbs when a browser is the front app: there, "create a CV", "add it to the cart" or "book the 9 am slot"
+   *  are about the page, and Jev still sends anything that isn't to the assistant. */
+  browserVerbs: new Set(["create", "make", "add", "book", "buy", "order", "apply", "register", "subscribe",
+                         "upload", "post", "reply", "compose", "write", "send", "share", "like", "follow",
+                         "sort", "filter", "set", "check", "uncheck", "pick", "change", "update", "remove",
+                         "delete", "edit", "save", "continue", "accept", "dismiss", "complete", "start",
+                         "use", "put", "copy", "paste", "login", "signup", "join", "mark", "rate", "reserve"]),
+
+  /** Browsers the quick commands and the Jev agent drive (window class / app id, lowercased). */
+  isBrowser(appId: string): boolean { return /chrome|chromium|brave|msedge|microsoft-edge/i.test(appId); },
+
   questionWords: new Set(["why", "how", "what", "explain", "tell", "where", "when", "which"]),
 
-  matches(text: string): boolean {
+  matches(text: string, browserInFront = false): boolean {
     let t = trimWSNLPunct(text.toLowerCase());
     if (trimWS(text).endsWith("?")) return false;
     for (const prefix of QuickCommandFilter.fillers) {
@@ -46,7 +57,7 @@ export const QuickCommandFilter = {
     // question words mean it's for the assistant, however it starts.
     const first = words[0];
     if (first === undefined || words.length > 20 || words.some((w) => QuickCommandFilter.questionWords.has(w))) return false;
-    return QuickCommandFilter.verbs.has(first);
+    return QuickCommandFilter.verbs.has(first) || (browserInFront && QuickCommandFilter.browserVerbs.has(first));
   },
 };
 

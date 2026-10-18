@@ -51,10 +51,13 @@ App.prototype.questionReady = async function (this: App, text: string) {
   }
   this.state.question = text;
   this.state.status = this.withScreen ? "Looking at your screen…" : "Thinking…";
-  if (!settings.get("quickCommands") || !QuickCommandFilter.matches(text)) { await this.routeThenAsk(text); return; }
+  const front = await this.desktop.activeWindow().catch(() => null);
+  const browserInFront = !!front && QuickCommandFilter.isBrowser(`${front.appId} ${front.app}`);
+  if (!settings.get("quickCommands") || !QuickCommandFilter.matches(text, browserInFront)) { await this.routeThenAsk(text); return; }
   // Jev first (fast path for simple browser commands); the assistant if it isn't a confident quick action.
   const started = Date.now();
-  const result = await this.runQuick(["quick", text], 3000);
+  // Up to 8 s: a slow first Jev answer is retried inside `quick` rather than handed to the assistant.
+  const result = await this.runQuick(["quick", text], 8000);
   if (this.state.phase !== "thinking" || this.state.question !== text) return;
   if (result?.task === true) { this.runBrowserTask(text); return; } // several steps: the Jev agent
   const handled = result?.handled === true;

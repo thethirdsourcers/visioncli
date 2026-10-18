@@ -140,4 +140,26 @@ export function register(server: McpServer) {
       return `Scrolled ${where}`;
     }),
   );
+
+  server.registerTool(
+    "browser_task",
+    {
+      title: "Do a task on the page (fast)",
+      description:
+        "Hand a multi-step task on the web page in front of the user's Chrome/Brave to VisionCLI's Jev agent: fill in a form, " +
+        "search this site and open a result, set filters, pick options, add to a cart. It clicks, types and selects in a few " +
+        "seconds (about 0.4 s a step). Put every value to type in the goal: it only types text that's in the goal. Returns each " +
+        "step and where it ended; check the result with browser_read if needed. Open the right page first (browser_open).",
+      inputSchema: { goal: z.string().describe("The whole task, with every value to type, e.g. \"search for 'standing desk', sort by price and open the first result\"") },
+    },
+    wrap(async ({ goal }) => {
+      const { browse } = await import("../agent/browserd.js");
+      const steps: string[] = [];
+      const end = await browse(goal, (e) => {
+        if (e.type === "step") steps.push(`${e.step.n}. ${e.step.op}${e.step.label ? ` "${e.step.label}"` : ""}${e.step.text ? ` → "${e.step.text}"` : ""}`);
+      });
+      if (!end || end.type !== "end") return `The browser agent stopped without finishing.\n${steps.join("\n")}`;
+      return `${end.status}: ${end.message} (${end.steps} steps, ${(end.ms / 1000).toFixed(1)} s)\n${steps.join("\n")}`;
+    }),
+  );
 }

@@ -18,9 +18,21 @@ enum QuickCommandFilter {
                                         "take", "visit", "launch", "navigate", "select", "choose", "fill", "enter", "submit",
                                         "zoom", "new", "look", "watch", "download", "sign", "log"]
 
+    /// More verbs when a browser is the front app: there, "create a CV", "add it to the cart" or "book the 9 am slot"
+    /// are about the page, and Jev still sends anything that isn't to the assistant.
+    static let browserVerbs: Set<Substring> = ["create", "make", "add", "book", "buy", "order", "apply", "register", "subscribe",
+                                               "upload", "post", "reply", "compose", "write", "send", "share", "like", "follow",
+                                               "sort", "filter", "set", "check", "uncheck", "pick", "change", "update", "remove",
+                                               "delete", "edit", "save", "continue", "accept", "dismiss", "complete", "start",
+                                               "use", "put", "copy", "paste", "login", "signup", "join", "mark", "rate", "reserve"]
+
+    /// Browsers the quick commands and the Jev agent drive.
+    static let browserBundles: Set<String> = ["com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary",
+                                              "com.brave.Browser", "com.brave.Browser.beta", "com.microsoft.edgemac"]
+
     static let questionWords: Set<Substring> = ["why", "how", "what", "explain", "tell", "where", "when", "which"]
 
-    static func matches(_ text: String) -> Bool {
+    static func matches(_ text: String, browserInFront: Bool = false) -> Bool {
         var t = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         if text.trimmingCharacters(in: .whitespaces).hasSuffix("?") { return false }
         for prefix in fillers where t.hasPrefix(prefix) {
@@ -30,7 +42,7 @@ enum QuickCommandFilter {
         // Up to 20 words leaves room for a browser task ("find a stay in Lisbon with a pool and open it");
         // question words mean it's for the assistant, however it starts.
         guard let first = words.first, words.count <= 20, !words.contains(where: { questionWords.contains($0) }) else { return false }
-        return verbs.contains(first)
+        return verbs.contains(first) || (browserInFront && browserVerbs.contains(first))
     }
 }
 

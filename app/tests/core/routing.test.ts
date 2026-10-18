@@ -11,6 +11,11 @@ test("QuickCommandFilter", () => {
     "open the file and then tell me why the tests in this folder fail on CI every time", "",
     "the button", "hello", "please", "is it open"];
   for (const t of no) assert.ok(!QuickCommandFilter.matches(t), `rejects "${t}"`);
+  assert.ok(!QuickCommandFilter.matches("create a CV for me"), "create alone isn't a browser command");
+  assert.ok(QuickCommandFilter.matches("create a CV for me", true), "with the browser in front it is");
+  assert.ok(!QuickCommandFilter.matches("why does create fail", true), "questions still go to the assistant");
+  assert.ok(QuickCommandFilter.isBrowser("google-chrome Google Chrome") && QuickCommandFilter.isBrowser("brave-browser") && QuickCommandFilter.isBrowser("msedge.exe"));
+  assert.ok(!QuickCommandFilter.isBrowser("code Visual Studio Code"));
   assert.ok(QuickCommandFilter.matches("open a b c d e f g h i j k l m n o p q r s"), "20 words is still short");
   assert.ok(!QuickCommandFilter.matches("open a b c d e f g h i j k l m n o p q r s t"), "21 words is too long");
   assert.ok(QuickCommandFilter.matches("find a stay in Lisbon for 3 nights with a pool and free cancellation, then open it"), "a browser task");

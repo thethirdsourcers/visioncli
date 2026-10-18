@@ -27,7 +27,10 @@ Use it whenever the user refers to something they are looking at: "this file", "
   decline or press Esc, stop and ask.
 - Browser (Brave/Chrome): \`browser_tabs\`, \`browser_open\`, \`browser_switch_tab\`, \`browser_navigate\`, \`browser_read\`,
   \`browser_elements\` → \`browser_click\` / \`browser_type\` / \`browser_select\` (dropdowns) by element id, \`browser_scroll\`. Prefer these over screenshots for
-  web pages: they're fast and exact.
+  web pages: they're fast and exact. For a multi-step task on the open page (a form, filters, search and open a result), call
+  \`browser_task\` with the whole goal and every value to type: VisionCLI's agent does it in seconds. Always use these for the
+  user's Chrome/Brave, not other browser-control tools (such as Claude in Chrome): they drive the user's own browser directly
+  and are much faster.
 - Reporting back later: when you told the user you'd let them know (a build, release, deploy, test run or other background
   work finishing), call \`announce\` with one or two short spoken sentences once it's done. They may be away from the
   terminal; VisionCLI shows it in a bubble and says it out loud. Only for real updates, not for every reply.`;
