@@ -407,6 +407,24 @@ export const ELEMENTS_JS = `(() => {
     }
     return undefined;
   };
+  // A control without a <label>: aria-labelledby, else the short text just before it ("Select Value", "Title").
+  const nearbyName = el => {
+    const by = el.getAttribute('aria-labelledby');
+    if (by) { const t = by.split(/\\s+/).map(i => el.ownerDocument.getElementById(i)?.innerText || '').join(' ').trim(); if (t) return t; }
+    // Start outside the widget's own box (its placeholder or chosen value isn't its name): climb while the text is
+    // still just the widget's.
+    let host = el;
+    const own = e => (e.innerText || '').replace(/\\s+/g, ' ').trim();
+    while (host.parentElement && (own(host) === '' || own(host.parentElement) === own(host)) && host.parentElement !== el.ownerDocument.body) host = host.parentElement;
+    for (let i = 0; i < 4 && host; i++, host = host.parentElement) {
+      let prev = host.previousElementSibling;
+      while (prev && !(prev.innerText || '').trim()) prev = prev.previousElementSibling;
+      const t = (prev?.innerText || '').replace(/\\s+/g, ' ').trim();
+      if (t && t.length <= 60) return t;
+      if (t) return '';
+    }
+    return '';
+  };
   const out = []; let n = 0;
   __qa('[data-vcli]').forEach(el => el.removeAttribute('data-vcli')); // ids from an earlier listing
   for (const el of __qa(sel)) {
@@ -426,13 +444,16 @@ export const ELEMENTS_JS = `(() => {
     if (kind === 'toggle') item.state = (el.checked ?? (el.getAttribute('aria-checked') === 'true')) ? 'on' : 'off';
     if (el.hasAttribute('aria-expanded')) item.expanded = el.getAttribute('aria-expanded') === 'true';
     // Only pickers have a chosen value (a combobox, a listbox popup); a menu button (File, Edit…) doesn't.
+    // A native dropdown's own text is all its options: name it by its label, the text before it, or its name/id.
+    if (el.tagName === 'SELECT') item.text = ((el.getAttribute('aria-label') || labelText(el) || nearbyName(el)).replace(/\\s+/g, ' ').trim() || el.name || el.id || 'dropdown').slice(0, 90);
+    else if (kind === 'dropdown' && item.text === '(empty dropdown)') { const name = nearbyName(el); if (name) item.text = name.replace(/\\s+/g, ' ').trim().slice(0, 90); }
     if (kind === 'dropdown' && el.tagName !== 'SELECT' && (role === 'combobox' || el.getAttribute('aria-haspopup') === 'listbox')) {
       const v = shownValue(el);
       if (v !== undefined) item.value = v || '(none)';
     }
     if (el.tagName === 'SELECT') {
-      item.text = label(el) || el.name || 'dropdown';
-      item.value = el.selectedOptions[0]?.text?.trim();
+      item.value = el.multiple ? [...el.selectedOptions].map(o => o.text.trim()).join(', ') || '(none)' : el.selectedOptions[0]?.text?.trim();
+      if (el.multiple) item.kind = 'dropdown:multiple';
       item.options = [...el.options].slice(0, 25).map(o => o.text.trim());
     }
     out.push(item);
@@ -440,6 +461,16 @@ export const ELEMENTS_JS = `(() => {
   }
   // Clickable things that aren't buttons: icons made of a span/svg with a click handler (a table's edit and delete
   // icons), named by their tooltip or label, and sortable table headers. Clickable means a pointer cursor (or a sort).
+  for (const el of __qa('[draggable=true], [class*=drag], [id*=drag]')) {
+    if (out.length >= 150) break;
+    if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || !vis(el) || isAd(el)) continue;
+    const cur = el.ownerDocument.defaultView.getComputedStyle(el).cursor;
+    if (el.getAttribute('draggable') !== 'true' && !/move|grab/.test(cur) && !/ui-draggable/.test(el.className)) continue;
+    const text = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
+    if (!text) continue;
+    const id = 'e' + (++n); el.setAttribute('data-vcli', id);
+    out.push({ id, kind: 'draggable', text });
+  }
   for (const el of __qa('[title], [aria-label], th, [aria-sort]')) {
     if (out.length >= 150) break;
     if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || el.querySelector('[data-vcli]') || !vis(el) || isAd(el)) continue;
@@ -524,8 +555,11 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     let el = __q('[data-vcli=${JSON.stringify(target)}]');
     if (!el) {
       const want = ${JSON.stringify(target.toLowerCase())};
-      el = [...__qa('a, button, label, [role=button], [role=link], [role=tab], [role=option], [role=menuitem], [role=checkbox], [role=switch], [role=radio], [role=combobox], [aria-haspopup], input[type=submit], summary')]
-        .find(e => (e.innerText || e.value || e.getAttribute('aria-label') || '').toLowerCase().trim().includes(want));
+      // The best match: exact text, then starting with it, then containing it ("Use" means the Use tab, not "Users").
+      const name = e => (e.innerText || e.value || e.getAttribute('aria-label') || e.getAttribute('title') || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+      const seen = e => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+      const all = [...__qa('[data-vcli], a, button, label, [role=button], [role=link], [role=tab], [role=option], [role=menuitem], [role=checkbox], [role=switch], [role=radio], [role=combobox], [aria-haspopup], input[type=submit], summary')].filter(seen);
+      el = all.find(e => name(e) === want) || all.find(e => name(e).startsWith(want)) || all.find(e => name(e).includes(want));
     }
     if (!el) return 'NOT_FOUND';
     if (el.tagName === 'SELECT') return 'USE_SELECT';
@@ -644,6 +678,13 @@ export async function select(target: string, option: string, b?: BrowserName): P
       const opt = [...el.options].find(o => o.text.trim().toLowerCase() === want || o.value.toLowerCase() === want)
         || [...el.options].find(o => o.text.toLowerCase().includes(want));
       if (!opt) return 'NO_OPTION:' + [...el.options].map(o => o.text.trim()).slice(0, 30).join(' | ');
+      if (el.multiple) {
+        // A multi-select adds the option (and keeps what's already chosen), like ⌘-clicking it.
+        opt.selected = true;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return 'DONE:' + [...el.selectedOptions].map(o => o.text.trim()).join(', ');
+      }
       const setter = Object.getOwnPropertyDescriptor(el.ownerDocument.defaultView.HTMLSelectElement.prototype, 'value').set;
       setter.call(el, opt.value);
       el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -809,4 +850,55 @@ export async function hover(target: string, b?: BrowserName): Promise<string> {
   })()`, b);
   if (r === "NOT_FOUND") throw new Error(`No element "${target}". Call browser_elements again.`);
   return r;
+}
+
+/**
+ * Drag one element onto another (ids from elements(), or visible text): sends both what HTML5 drag-and-drop listens to
+ * (dragstart / dragover / drop with a DataTransfer) and the mouse down / moves / up that mouse-driven libraries
+ * (jQuery UI, SortableJS, dnd-kit) follow. Returns what the target says afterwards.
+ */
+export async function drag(from: string, to: string, b?: BrowserName): Promise<string> {
+  const r = await js(`(() => {
+    ${FRAMES}
+    const find = t => {
+      const byId = __q('[data-vcli=' + JSON.stringify(t) + ']'); if (byId) return byId;
+      const want = t.toLowerCase();
+      const name = e => (e.getAttribute('aria-label') || e.getAttribute('title') || (e.children.length < 6 ? e.innerText : '') || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+      const seen = e => { const r = e.getBoundingClientRect(); return r.width > 2 && r.height > 2; };
+      const all = __qa('[draggable], div, li, span, td, p, section, [role]').filter(seen);
+      return all.find(e => name(e) === want) || all.find(e => name(e).startsWith(want));
+    };
+    const src = find(${JSON.stringify(from)}), dst = find(${JSON.stringify(to)});
+    if (!src) return 'NO_SOURCE'; if (!dst) return 'NO_TARGET';
+    src.scrollIntoView({ block: 'center' });
+    const a = src.getBoundingClientRect(), z = dst.getBoundingClientRect();
+    const x1 = a.left + a.width / 2, y1 = a.top + a.height / 2, x2 = z.left + z.width / 2, y2 = z.top + z.height / 2;
+    const doc = src.ownerDocument, view = doc.defaultView, P = view.PointerEvent || MouseEvent;
+    const at = (x, y, extra) => ({ bubbles: true, cancelable: true, composed: true, view, clientX: x, clientY: y, screenX: x, screenY: y, ...extra });
+    const under = (x, y) => doc.elementFromPoint(x, y) || dst;
+    // Mouse-driven libraries.
+    src.dispatchEvent(new P('pointerdown', at(x1, y1, { pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 })));
+    src.dispatchEvent(new MouseEvent('mousedown', at(x1, y1, { button: 0, buttons: 1 })));
+    for (let i = 1; i <= 10; i++) {
+      const x = x1 + (x2 - x1) * i / 10, y = y1 + (y2 - y1) * i / 10;
+      under(x, y).dispatchEvent(new P('pointermove', at(x, y, { pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1 })));
+      under(x, y).dispatchEvent(new MouseEvent('mousemove', at(x, y, { buttons: 1 })));
+      doc.dispatchEvent(new MouseEvent('mousemove', at(x, y, { buttons: 1 })));
+    }
+    dst.dispatchEvent(new MouseEvent('mouseover', at(x2, y2, { buttons: 1 })));
+    under(x2, y2).dispatchEvent(new P('pointerup', at(x2, y2, { pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0 })));
+    under(x2, y2).dispatchEvent(new MouseEvent('mouseup', at(x2, y2, { button: 0 })));
+    doc.dispatchEvent(new MouseEvent('mouseup', at(x2, y2, { button: 0 })));
+    // HTML5 drag and drop.
+    const drag = src.closest('[draggable=true]');
+    if (drag && view.DataTransfer) {
+      const dt = new view.DataTransfer();
+      const D = (type, el, x, y) => el.dispatchEvent(new view.DragEvent(type, at(x, y, { dataTransfer: dt })));
+      D('dragstart', drag, x1, y1); D('dragenter', dst, x2, y2); D('dragover', dst, x2, y2); D('drop', dst, x2, y2); D('dragend', drag, x2, y2);
+    }
+    return 'OK:' + (dst.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 80);
+  })()`, b);
+  if (r === "NO_SOURCE") throw new Error(`Nothing to drag matching "${from}".`);
+  if (r === "NO_TARGET") throw new Error(`No drop target matching "${to}".`);
+  return r.slice(3);
 }

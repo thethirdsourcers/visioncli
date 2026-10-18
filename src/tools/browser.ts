@@ -140,6 +140,17 @@ export function register(server: McpServer) {
   );
 
   server.registerTool(
+    "browser_drag",
+    {
+      title: "Drag and drop",
+      description: "Drag an element onto another (ids from browser_elements, which lists draggables, or visible text): " +
+        "sorting lists, boards, upload drop zones, sliders built from divs. Returns the target's text afterwards.",
+      inputSchema: { from: z.string().describe("What to drag: id or visible text"), to: z.string().describe("Where to drop it: id or visible text") },
+    },
+    wrap(async ({ from, to }) => `Dragged onto “${await browser.drag(from, to)}”`),
+  );
+
+  server.registerTool(
     "browser_fill",
     {
       title: "Fill in a form",
