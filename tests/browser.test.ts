@@ -155,3 +155,16 @@ describe("page scripts", () => {
     assert.match(scripts[0], /if \(!combo\)/);
   });
 });
+
+describe("site guides", () => {
+  test("NetSuite's guide comes once, for any account host; other sites get none", async () => {
+    const { guideFor, resetGuides } = await import("../src/sites.js");
+    resetGuides();
+    assert.equal(guideFor("https://example.com/"), null);
+    const g = guideFor("https://3778702.app.netsuite.com/app/center/card.nl?sc=-29");
+    assert.match(g ?? "", /NetSuite guide/);
+    assert.match(g ?? "", /ubersearchresults\.nl/);
+    assert.equal(guideFor("https://1234.app.netsuite.com/app/common/entity/custjoblist.nl"), null, "once per session");
+    assert.equal(guideFor("not a url"), null);
+  });
+});

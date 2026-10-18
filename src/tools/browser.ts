@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import * as browser from "../browser.js";
+import { guideFor } from "../sites.js";
 import { errorResult, text } from "./common.js";
 
 const wrap = <A,>(fn: (args: A) => Promise<string>) => async (args: A) => {
@@ -73,7 +74,12 @@ export function register(server: McpServer) {
       inputSchema: { max_chars: z.number().int().min(500).max(50000).default(6000).describe("Raise it (up to 50000) only if the text you need was cut off") },
       annotations: { readOnlyHint: true },
     },
-    wrap(async ({ max_chars }) => browser.read(max_chars)),
+    wrap(async ({ max_chars }) => {
+      const page = await browser.read(max_chars);
+      // The first page of a big app (NetSuite…) comes with how to get around it.
+      const guide = guideFor(page.split("\n")[1]);
+      return guide ? `${page}\n\n${guide}` : page;
+    }),
   );
 
   server.registerTool(
@@ -84,13 +90,16 @@ export function register(server: McpServer) {
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
-    wrap(async () =>
-      (await browser.elements())
+    wrap(async () => {
+      const list = (await browser.elements())
         .map((e) =>
           [e.id, e.kind, e.text, e.state && `[${e.state}]`, e.expanded !== undefined && (e.expanded ? "[open]" : "[closed]"),
             e.value !== undefined && `value: ${e.value}`, e.options && `options: ${e.options.join(" | ")}`, e.href]
             .filter(Boolean).join("\t"))
-        .join("\n") || "(none)"),
+        .join("\n") || "(none)";
+      const guide = guideFor((await browser.activeTab().catch(() => undefined))?.url);
+      return guide ? `${list}\n\n${guide}` : list;
+    }),
   );
 
   server.registerTool(

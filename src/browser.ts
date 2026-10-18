@@ -219,26 +219,33 @@ async function pageState(browser: BrowserName): Promise<PageState | null> {
 }
 
 /** Watches the page for changes (kept in the page between calls), so settle() can tell when it's quiet. */
-const WATCH = `(() => { if (!window.__vcliQuiet) { window.__vcliQuiet = { at: Date.now() };
-    new MutationObserver(() => { window.__vcliQuiet.at = Date.now(); }).observe(document, { subtree: true, childList: true, characterData: true }); }
-  return JSON.stringify({ ready: document.readyState, href: location.href, doc: performance.timeOrigin, quietMs: Date.now() - window.__vcliQuiet.at }); })()`;
+const WATCH = `(() => { if (!window.__vcliQuiet) { window.__vcliQuiet = { at: Date.now(), leaving: false };
+    new MutationObserver(() => { window.__vcliQuiet.at = Date.now(); }).observe(document, { subtree: true, childList: true, characterData: true });
+    // The page is being replaced: until the server answers, the old one stays on screen and looks settled.
+    addEventListener('beforeunload', () => { window.__vcliQuiet.leaving = true; });
+    addEventListener('pagehide', () => { window.__vcliQuiet.leaving = true; }); }
+  return JSON.stringify({ ready: document.readyState, href: location.href, doc: performance.timeOrigin, quietMs: Date.now() - window.__vcliQuiet.at, leaving: window.__vcliQuiet.leaving }); })()`;
 
 /**
  * After an action that may navigate: a new document loads, or a single-page app (GitHub, Gmail, React Router) swaps
  * the content without one. Waits until the page has stopped changing: quiet for 300 ms, loaded if it's a new
  * document; at most `ms`. A click that changes nothing costs about 0.3 s.
  */
-async function settle(browser: BrowserName, before: PageState | null, ms = 4000) {
+async function settle(browser: BrowserName, before: PageState | null, ms = 4000, expectNewPage = false, quiet = 300) {
   if (process.env.VISIONCLI_JS_DUMP) return;
-  const until = Date.now() + ms;
+  // A link to another page: its document will be replaced, however long the server takes (NetSuite, banks).
+  const until = Date.now() + (expectNewPage ? 10000 : ms);
   while (Date.now() < until) {
     await new Promise((r) => setTimeout(r, 120));
-    let s: (PageState & { quietMs: number }) | null = null;
+    let s: (PageState & { quietMs: number; leaving?: boolean }) | null = null;
     try { s = JSON.parse(await js(WATCH, browser)); } catch {}
     if (!s) continue; // between documents
-    const moved = !before || s.doc !== before.doc || s.href !== before.href;
+    const newDoc = !before || s.doc !== before.doc;
+    if (s.leaving && !newDoc) continue; // on its way to the next page
+    if (expectNewPage && !newDoc) continue;
+    const moved = newDoc || (!!before && s.href !== before.href);
     if (s.ready !== "complete") continue;
-    if (s.quietMs >= (moved ? 400 : 300)) return;
+    if (s.quietMs >= (moved ? Math.max(400, quiet) : quiet)) return;
   }
 }
 
@@ -387,6 +394,9 @@ const FRAMES = `const __docs = () => { const out = [document];
       if (fs.length > 1) return null;
     }
     return null; };
+  // Scroll an element into view only if it's off screen: scrolling closes open menus (NetSuite, most dropdowns).
+  const __reveal = el => { const r = el.getBoundingClientRect(), v = el.ownerDocument.defaultView;
+    if (r.bottom < 0 || r.top > v.innerHeight || r.right < 0 || r.left > v.innerWidth) el.scrollIntoView({ block: 'center' }); };
   const __rect = el => { const r = el.getBoundingClientRect(); let x = r.left, y = r.top, w = el.ownerDocument.defaultView;
     while (w && w !== window && w.frameElement) { const fr = w.frameElement.getBoundingClientRect(); x += fr.left; y += fr.top; w = w.parent; }
     return { left: x, top: y, width: r.width, height: r.height }; };`;
@@ -464,8 +474,21 @@ export const ELEMENTS_JS = `(() => {
   };
   const out = [], found = []; let n = 0; // candidates with temporary ids; the best 150 get e1… at the end
   __qa('[data-vcli]').forEach(el => el.removeAttribute('data-vcli')); // ids from an earlier listing
-  for (const el of __qa(sel)) {
-    if (!vis(el) || isAd(el)) continue;
+  // Rank before cutting to 150: an open dialog's controls first (they're what the user is looking at), then what's on
+  // screen, then the rest, each in page order. Big sidebars no longer push a dialog's fields off the list.
+  // Open pop-ups: the top dialog, and every open menu or list (a menu's submenus are separate pop-ups).
+  const popups = [__qa('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]').filter(vis).pop(),
+    ...__qa('[role=menu], [role=listbox]').filter(vis)].filter(Boolean);
+  const inPopup = el => popups.some(p => p.contains(el) || (el.getRootNode().host && p.contains(el.getRootNode().host)));
+  // A visible menu item or option means its menu is open, even without a role=menu container (NetSuite's uif menus).
+  const popupRole = el => /^(menuitem|menuitemcheckbox|menuitemradio|option)$/.test(el.getAttribute('role') || '') ||
+    !!el.closest('[role=menuitem], [role=option]');
+  const rank = el => { if (inPopup(el) || popupRole(el)) return 0;
+    const r = __rect(el); return r.top + r.height > 0 && r.top < innerHeight && r.left < innerWidth && r.left + r.width > 0 ? 1 : 2; };
+  // Candidates in rank order (a page can have thousands; a menu drawn at the end of the page must not be cut off).
+  const ranked = list => list.map((el, i) => ({ el, i, r: rank(el) })).sort((a, b) => a.r - b.r || a.i - b.i).map(o => o.el);
+  for (const el of ranked(__qa(sel).filter(vis))) {
+    if (isAd(el)) continue;
     if (el.tagName === 'LABEL' && el.querySelector('input, select, textarea, button')) continue; // the control itself is listed
     const text = label(el); if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
     const id = 'p' + (++n); el.setAttribute('data-vcli', id); found.push(el);
@@ -498,7 +521,7 @@ export const ELEMENTS_JS = `(() => {
       item.options = [...el.options].slice(0, 25).map(o => o.text.trim());
     }
     out.push(item);
-    if (out.length >= 600) break;
+    if (out.length >= 300) break;
   }
   // Clickable things that aren't buttons: icons made of a span/svg with a click handler (a table's edit and delete
   // icons), named by their tooltip or label, and sortable table headers. Clickable means a pointer cursor (or a sort).
@@ -526,11 +549,6 @@ export const ELEMENTS_JS = `(() => {
     if (el.hasAttribute('aria-sort')) item.state = 'sorted ' + el.getAttribute('aria-sort');
     out.push(item);
   }
-  // Rank before cutting to 150: an open dialog's controls first (they're what the user is looking at), then what's on
-  // screen, then the rest, each in page order. Big sidebars no longer push a dialog's fields off the list.
-  const dialog = __qa('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]').filter(vis).pop();
-  const rank = el => { if (dialog && (dialog.contains(el) || (el.getRootNode().host && dialog.contains(el.getRootNode().host)))) return 0;
-    const r = __rect(el); return r.top + r.height > 0 && r.top < innerHeight && r.left < innerWidth && r.left + r.width > 0 ? 1 : 2; };
   const order = out.map((item, i) => ({ item, el: found[i], i, r: rank(found[i]) })).sort((a, b) => a.r - b.r || a.i - b.i);
   const kept = order.slice(0, 150);
   order.slice(150).forEach(o => o.el.removeAttribute('data-vcli'));
@@ -613,14 +631,17 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     }
     if (!el) return 'NOT_FOUND';
     if (el.tagName === 'SELECT') return 'USE_SELECT';
+    // A link that loads another page in this tab: the caller waits for that page.
+    const a = el.closest('a[href]');
+    const nav = !!a && !a.target && !/^(javascript:|#)/i.test(a.getAttribute('href') || '') && a.href.split('#')[0] !== location.href.split('#')[0];
     ${PRESS_LIB}
     const label = (el.labels?.[0]?.innerText || el.innerText || __slotText(el) || el.getAttribute('aria-label') || el.getAttribute('title') || el.value || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 80);
-    el.scrollIntoView({ block: 'center' });
+    __reveal(el);
     ${ghostOn() ? `${GHOST_LIB}
     const r = __rect(el);
     window.__vcliPress(el); // act now; the ghost cursor only shows where (its timers may be throttled)
     window.__vcliGhost(r.left + Math.min(r.width / 2, 48), r.top + r.height / 2, null);` : "window.__vcliPress(el);"}
-    return label;
+    return (nav ? 'NAV:' : '') + label;
   })()`;
   const browser = b ?? (await pick());
   // Start watching before the click, so a single-page app's swap counts as a change.
@@ -628,8 +649,9 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
   const r = await js(code, browser);
   if (r === "NOT_FOUND") throw new Error(`No clickable element matching "${target}".`);
   if (r === "USE_SELECT") throw new Error(`"${target}" is a native dropdown: use browser_select with the option text instead of clicking it.`);
-  await settle(browser, before);
-  return r;
+  const nav = r.startsWith("NAV:");
+  await settle(browser, before, 4000, nav);
+  return nav ? r.slice(4) : r;
 }
 
 export async function type(target: string, text: string, submit = false, b?: BrowserName): Promise<string> {
@@ -650,13 +672,24 @@ export async function type(target: string, text: string, submit = false, b?: Bro
     }
     if (!el || !('value' in el)) return 'NOT_FOUND';
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
-    const set = v => { setter ? setter.call(el, v) : (el.value = v); el.dispatchEvent(new Event('input', { bubbles: true })); };
+    // Typed-text events (beforeinput + InputEvent), not a bare Event: some frameworks (NetSuite's uif, Lexical,
+    // Draft) ignore an input event that doesn't say what was inserted.
+    const IE = el.ownerDocument.defaultView.InputEvent || Event;
+    const set = v => { el.dispatchEvent(new IE('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: v }));
+      setter ? setter.call(el, v) : (el.value = v); el.dispatchEvent(new IE('input', { bubbles: true, inputType: 'insertText', data: v })); };
     // A search-as-you-type dropdown needs its text to stay (browser_select picks from the suggestions next).
     const combo = el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-autocomplete') || !!el.closest('[role=combobox]');
     const finish = () => {
       set(text);
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      ${submit ? "if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); } else { el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }" : `
+      ${submit ? `
+      // Press Enter the way a person does: many apps (NetSuite's global search, chat boxes, React forms) act on the key
+      // and stop it; only if nothing handled it is the form submitted (a synthetic Enter doesn't submit by itself).
+      const enter = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+      const down = el.dispatchEvent(new KeyboardEvent('keydown', enter));
+      const press = el.dispatchEvent(new KeyboardEvent('keypress', enter));
+      el.dispatchEvent(new KeyboardEvent('keyup', enter));
+      if (down && press && el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }` : `
       // Any other field: close what typing opened (a date picker's calendar would cover the next click), and leave it.
       // Tab, not Escape: pickers close on it, while Escape would also close a dialog the field is in.
       if (!combo) {
@@ -796,8 +829,10 @@ export async function select(target: string, option: string, b?: BrowserName): P
       if (!el) return 'NO';
       el.focus();
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      const IE = el.ownerDocument.defaultView.InputEvent || Event;
+      el.dispatchEvent(new IE('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(option)} }));
       setter ? setter.call(el, ${JSON.stringify(option)}) : (el.value = ${JSON.stringify(option)});
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new IE('input', { bubbles: true, inputType: 'insertText', data: ${JSON.stringify(option)} }));
       return 'TYPED';
     })()`, b);
     if (typed === "TYPED") {
@@ -842,8 +877,10 @@ export async function fill(fields: FillField[], b?: BrowserName): Promise<string
       if (!('value' in el)) return 'BUTTON';
       el.focus();
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
-      setter ? setter.call(el, String(value)) : (el.value = String(value));
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      const IE = el.ownerDocument.defaultView.InputEvent || Event, v = String(value);
+      el.dispatchEvent(new IE('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: v }));
+      setter ? setter.call(el, v) : (el.value = v);
+      el.dispatchEvent(new IE('input', { bubbles: true, inputType: 'insertText', data: v }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
       // Close what typing opened (a date picker), with Tab: Escape would also close a dialog the form is in.
       const tab = { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true, cancelable: true };
@@ -874,6 +911,8 @@ export async function fill(fields: FillField[], b?: BrowserName): Promise<string
  * parents (a real hover covers them too). The pointer itself doesn't move. The next hover moves it to another element.
  */
 export async function hover(target: string, b?: BrowserName): Promise<string> {
+  const browser = b ?? (await pick());
+  const before = await js(WATCH, browser).then((x) => JSON.parse(x) as PageState, () => null);
   const r = await js(`(() => {
     ${FRAMES}
     let el = __q('[data-vcli=${JSON.stringify(target)}]');
@@ -901,18 +940,38 @@ export async function hover(target: string, b?: BrowserName): Promise<string> {
     }
     doc.querySelectorAll('.__vcliHover').forEach(e => e.classList.remove('__vcliHover'));
     for (let e = el; e && e.classList; e = e.parentElement) e.classList.add('__vcliHover');
-    el.scrollIntoView({ block: 'center' });
+    __reveal(el);
     const r = el.getBoundingClientRect();
     const o = { bubbles: true, cancelable: true, view: doc.defaultView, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
     const P = doc.defaultView.PointerEvent || MouseEvent;
     el.dispatchEvent(new P('pointerover', { ...o, pointerId: 1, pointerType: 'mouse' }));
-    el.dispatchEvent(new P('pointerenter', { ...o, bubbles: false, pointerId: 1, pointerType: 'mouse' }));
     el.dispatchEvent(new MouseEvent('mouseover', o));
-    el.dispatchEvent(new MouseEvent('mouseenter', { ...o, bubbles: false }));
+    // Enter every parent the pointer wasn't already in (outermost first), like a real pointer coming from the last
+    // hovered element: menus listen on the parent item (NetSuite's tabs, mega-menus), these events don't bubble, and
+    // re-entering a menu bar it never left closes NetSuite's menus.
+    const chain = []; for (let e = el; e && e !== doc.documentElement; e = e.parentElement) chain.unshift(e);
+    const prev = (doc.defaultView.__vcliHoverChain || []).filter(e => e.isConnected);
+    const prevLeaf = prev[prev.length - 1];
+    // No leave events for what it was over: a submenu drawn in a pop-up layer (NetSuite, MUI, Radix) isn't inside the
+    // item that opened it, and "leaving" that item closes the menu being walked through.
+    // Hovering the same spot (or a parent of it) again is moving away and back: enter the whole chain, which re-opens a
+    // menu that closed meanwhile. Moving somewhere new enters only what's new.
+    // Moving somewhere new enters only the element itself: a pop-up menu's own list and layer close NetSuite's menus
+    // when "entered" (a real pointer crossing them doesn't, thanks to its timing).
+    const again = !prev.length || prev.includes(el);
+    for (const e of again ? chain : [el]) {
+      e.dispatchEvent(new P('pointerenter', { ...o, bubbles: false, pointerId: 1, pointerType: 'mouse', relatedTarget: prevLeaf || null }));
+      e.dispatchEvent(new MouseEvent('mouseenter', { ...o, bubbles: false, relatedTarget: prevLeaf || null }));
+    }
+    doc.defaultView.__vcliHoverChain = chain;
+    el.dispatchEvent(new P('pointermove', { ...o, pointerId: 1, pointerType: 'mouse' }));
     el.dispatchEvent(new MouseEvent('mousemove', o));
     return (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 60);
-  })()`, b);
+  })()`, browser);
   if (r === "NOT_FOUND") throw new Error(`No element "${target}". Call browser_elements again.`);
+  // Menus open a moment after the hover ("hover intent" timers of a few hundred ms: NetSuite, mega-menus): wait until
+  // the page has been quiet for 700 ms before anyone looks.
+  await settle(browser, before, 2500, false, 700);
   return r;
 }
 
