@@ -709,11 +709,16 @@ export async function read(maxChars = 6000, b?: BrowserName): Promise<string> {
     // Long option lists (a date picker's 200 years, every country) are noise here: browser_elements lists their options.
     const long = __qa('select, [role=listbox]').filter(l => (l.options || l.children).length > 15 && l.style.display !== 'none');
     long.forEach(l => { l.dataset.vcliDisplay = l.style.display; l.style.display = 'none'; });
+    // Buttons made of <input> ("Choose This Flight", "Purchase") show their words in value, which page text leaves
+    // out: put them in as text for the read, and take them out again in the same step.
+    const shown = __qa('input[type=submit], input[type=button], input[type=reset]').filter(i => i.value && i.offsetWidth > 0).map(i => {
+      const t = i.ownerDocument.createTextNode('[' + i.value + ']'); i.after(t); return t; });
     const adFrame = d => { const f = d.defaultView && d.defaultView.frameElement;
       return !!f && (/googlesyndication|doubleclick|googleadservices/i.test(f.src || '') || /google_ads|aswift/i.test((f.id || '') + (f.name || ''))); };
     const frames = __docs().slice(1).filter(d => !adFrame(d)).map(d => d.body ? d.body.innerText || '' : '').filter(t => t.trim());
     const text = [main.innerText || '', ...frames].join('\\n\\n').replace(/\\n{3,}/g, '\\n\\n');
     long.forEach(l => { l.style.display = l.dataset.vcliDisplay; delete l.dataset.vcliDisplay; });
+    shown.forEach(t => t.remove());
     return JSON.stringify({ title: document.title, url: location.href, selection: String(getSelection() || ''), text: text.slice(0, ${maxChars}) });
   })()`;
   const page = JSON.parse(await js(code, b));
