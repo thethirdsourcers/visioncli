@@ -180,6 +180,8 @@ Slash commands: `/mcp__visioncli__see <question>`, `/mcp__visioncli__point <ques
 | `device_screenshot` | Clean iOS Simulator (needs Xcode) or Android (`adb`) screenshot |
 | `db_schema`, `db_query` | Tables, columns, foreign keys; single read-only SELECT/SHOW/DESCRIBE/EXPLAIN/WITH queries in a read-only transaction (MySQL, Postgres, SQLite from `.env`) |
 | `browser_tabs`, `browser_open`, `browser_switch_tab`, `browser_navigate`, `browser_read`, `browser_elements`, `browser_click`, `browser_type`, `browser_select`, `browser_scroll` | Fast Chrome/Brave control via AppleScript (dropdowns, toggles with on/off state, custom React/Radix widgets) |
+| `browser_fill` | Fills a whole form in one call: text fields, dropdowns (native, custom or searchable) and checkboxes |
+| `browser_task` | Hands a multi-step task on the open page to the Jev agent (about 0.4 s a step) |
 | `ui_elements`, `click`, `type_text`, `press_keys`, `scroll`, `drag`, `open_app`, `open_url` | Use any app: Accessibility element list with ids, real mouse/keyboard, by element id or screenshot pixels. Performed by VisionCLI.app (needs Accessibility permission), approved in the bubble |
 | `start_voice` | Start the voice overlay |
 </details>

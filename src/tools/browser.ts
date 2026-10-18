@@ -129,6 +129,21 @@ export function register(server: McpServer) {
   );
 
   server.registerTool(
+    "browser_fill",
+    {
+      title: "Fill in a form",
+      description:
+        "Fill several fields of a form in one call (ids from browser_elements): text fields get the text, dropdowns (native, " +
+        "custom or searchable) pick the option by its text, checkboxes/radios/switches are set on (true) or off (false). " +
+        "Much faster than one call per field. Each field reports its result; submit with browser_click afterwards.",
+      inputSchema: {
+        fields: z.array(z.object({ target: z.string().describe("Element id like e12"), value: z.union([z.string(), z.boolean()]) })).min(1),
+      },
+    },
+    wrap(async ({ fields }) => (await browser.fill(fields)).join("\n")),
+  );
+
+  server.registerTool(
     "browser_scroll",
     {
       title: "Scroll the page",

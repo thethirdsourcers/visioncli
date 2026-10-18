@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { ELEMENTS_JS, sameUrl, serial, shortHrefFor, zipTabs } from "../src/browser.js";
+import { ELEMENTS_JS, fill, loadedFrom, read, sameUrl, select, serial, shortHrefFor, type, zipTabs } from "../src/browser.js";
 
 describe("shortHrefFor", () => {
   test("same host: just path + short query", () => {
@@ -108,5 +108,43 @@ describe("serial", () => {
     const failed = serial((() => { throw new Error("sync"); }) as () => Promise<never>);
     await assert.rejects(failed, /sync/);
     assert.equal(await serial(async () => 1), 1);
+  });
+});
+
+describe("loadedFrom", () => {
+  test("loaded and on the site that was opened (redirects within it count)", () => {
+    assert.ok(loadedFrom({ ready: "complete", href: "https://en.wikipedia.org/wiki/Commodore_64" }, "https://en.wikipedia.org/wiki/Special:Search?search=c64"));
+    assert.ok(loadedFrom({ ready: "complete", href: "https://github.com/" }, "https://www.github.com"));
+  });
+  test("still loading, or still the previous page", () => {
+    assert.ok(!loadedFrom({ ready: "interactive", href: "https://en.wikipedia.org/" }, "https://en.wikipedia.org/"));
+    assert.ok(!loadedFrom({ ready: "complete", href: "https://news.ycombinator.com/" }, "https://en.wikipedia.org/"));
+  });
+});
+
+describe("page scripts", () => {
+  // Every script the browser tools send to the page must be valid JavaScript (they're built from template strings).
+  const scripts: string[] = [];
+  const dump = async (call: () => Promise<unknown>) => {
+    process.env.VISIONCLI_JS_DUMP = "1";
+    (globalThis as any).__vcliDump = (code: string) => scripts.push(code);
+    try { await call(); } catch {} finally { delete process.env.VISIONCLI_JS_DUMP; }
+  };
+  test("elements, read, type, select and fill compile", async () => {
+    await dump(() => read(2000, "Google Chrome"));
+    await dump(() => type("e3", "it's \"quoted\"", false, "Google Chrome"));
+    await dump(() => type("e3", "x", true, "Google Chrome"));
+    await dump(() => select("e5", "Maths", "Google Chrome"));
+    await dump(() => fill([{ target: "e3", value: "Grace" }, { target: "e9", value: true }, { target: "e5", value: "Maths" }], "Google Chrome"));
+    scripts.push(ELEMENTS_JS);
+    assert.ok(scripts.length >= 6);
+    for (const s of scripts) assert.doesNotThrow(() => new Function(`return ${s}`), s.slice(0, 120));
+  });
+  test("type closes a picker with Tab (not Escape, which closes dialogs), but not in a search-as-you-type field", async () => {
+    scripts.length = 0;
+    await dump(() => type("e3", "10 Dec 1815", false, "Google Chrome"));
+    assert.match(scripts[0], /key: 'Tab'/);
+    assert.doesNotMatch(scripts[0], /key: 'Escape'/);
+    assert.match(scripts[0], /if \(!combo\)/);
   });
 });

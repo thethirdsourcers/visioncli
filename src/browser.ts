@@ -202,6 +202,31 @@ export const sameUrl = (a: string, b: string) => {
 export async function open(url: string, newTab = true, b?: BrowserName, knownTabs?: Tab[]): Promise<string> {
   const browser = b ?? (await pick());
   if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;
+  const said = await openTab(url, newTab, browser, knownTabs);
+  // Wait for the page, so the next read or click sees it (not the page that was there before).
+  await waitForLoad(url, browser);
+  return said;
+}
+
+/** True once a page from `url`'s site has loaded in the active tab (redirects within the site count). */
+export function loadedFrom(state: { ready: string; href: string }, url: string): boolean {
+  if (state.ready !== "complete") return false;
+  try { return new URL(state.href).host.replace(/^www\./, "") === new URL(url).host.replace(/^www\./, ""); } catch { return false; }
+}
+
+/** Polls the active tab until it shows `url`'s site, fully loaded (up to `ms`; slow pages just carry on). */
+async function waitForLoad(url: string, browser: BrowserName, ms = 8000) {
+  if (!/^https?:/i.test(url) || process.env.VISIONCLI_JS_DUMP) return;
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const raw = await js(`JSON.stringify({ ready: document.readyState, href: location.href })`, browser).catch(() => "");
+    try { if (loadedFrom(JSON.parse(raw), url)) return; } catch {}
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
+async function openTab(url: string, newTab: boolean, browser: BrowserName, knownTabs?: Tab[]): Promise<string> {
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;
   const existing = (knownTabs ?? (await tabs(browser).catch(() => [] as Tab[]))).find((t) => sameUrl(t.url, url));
   if (existing) {
     await switchTo(existing.id, browser);
@@ -340,10 +365,31 @@ export const ELEMENTS_JS = `(() => {
     '[role=button], [role=link], [role=tab], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=option], ' +
     '[role=checkbox], [role=switch], [role=radio], [role=combobox], [role=listbox], [role=slider], [role=treeitem]';
   const shortHref = el => typeof el.href === 'string' && el.href ? (${shortHrefFor})(el.href, el.ownerDocument.location.host) : undefined;
+  // Ads (and their "Why this ad?" menus) aren't part of the page the user means.
+  const AD = /googleadservices|doubleclick|googlesyndication|adssettings\\.google|adservice\\.google|amazon-adsystem|taboola|outbrain/i;
+  const isAd = el => (typeof el.href === 'string' && AD.test(el.href)) ||
+    !!el.closest('ins.adsbygoogle, [id^=google_ads], [id*=div-gpt-ad], [data-google-query-id], [aria-label=Advertisement]') ||
+    (el.ownerDocument !== document && (() => { const f = el.ownerDocument.defaultView.frameElement;
+      return !!f && (AD.test(f.src || '') || /google_ads|aswift/i.test((f.id || '') + (f.name || ''))); })());
+  // A custom dropdown's current choice: its own value, else the short text next to it (react-select, MUI, Radix show
+  // the chosen option beside the input); a placeholder isn't a choice.
+  const shownValue = el => {
+    if (el.value && typeof el.value === 'string') return el.value.trim();
+    let host = el;
+    for (let i = 0; i < 4 && host.parentElement; i++) {
+      host = host.parentElement;
+      const t = (host.innerText || '').replace(/\\s+/g, ' ').trim();
+      if (!t) continue;
+      if (t.length > 80) return undefined;
+      const ph = host.querySelector('[class*=placeholder], [data-placeholder]');
+      return ph && (ph.innerText || '').trim() === t ? '' : t;
+    }
+    return undefined;
+  };
   const out = []; let n = 0;
   __qa('[data-vcli]').forEach(el => el.removeAttribute('data-vcli')); // ids from an earlier listing
   for (const el of __qa(sel)) {
-    if (!vis(el)) continue;
+    if (!vis(el) || isAd(el)) continue;
     if (el.tagName === 'LABEL' && el.querySelector('input, select, textarea, button')) continue; // the control itself is listed
     const text = label(el); if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
     const id = 'e' + (++n); el.setAttribute('data-vcli', id);
@@ -358,6 +404,10 @@ export const ELEMENTS_JS = `(() => {
     const item = { id, kind, text: text || '(empty ' + kind + ')', href: shortHref(el) };
     if (kind === 'toggle') item.state = (el.checked ?? (el.getAttribute('aria-checked') === 'true')) ? 'on' : 'off';
     if (el.hasAttribute('aria-expanded')) item.expanded = el.getAttribute('aria-expanded') === 'true';
+    if (kind === 'dropdown' && el.tagName !== 'SELECT') {
+      const v = shownValue(el);
+      if (v !== undefined) item.value = v || '(none)';
+    }
     if (el.tagName === 'SELECT') {
       item.text = label(el) || el.name || 'dropdown';
       item.value = el.selectedOptions[0]?.text?.trim();
@@ -465,10 +515,20 @@ export async function type(target: string, text: string, submit = false, b?: Bro
     const text = ${JSON.stringify(text)};
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
     const set = v => { setter ? setter.call(el, v) : (el.value = v); el.dispatchEvent(new Event('input', { bubbles: true })); };
+    // A search-as-you-type dropdown needs its text to stay (browser_select picks from the suggestions next).
+    const combo = el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-autocomplete') || !!el.closest('[role=combobox]');
     const finish = () => {
       set(text);
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      ${submit ? "if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); } else { el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }" : ""}
+      ${submit ? "if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); } else { el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }" : `
+      // Any other field: close what typing opened (a date picker's calendar would cover the next click), and leave it.
+      // Tab, not Escape: pickers close on it, while Escape would also close a dialog the field is in.
+      if (!combo) {
+        const tab = { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true, cancelable: true };
+        el.dispatchEvent(new KeyboardEvent('keydown', tab));
+        el.dispatchEvent(new KeyboardEvent('keyup', tab));
+        el.blur();
+      }`}
     };
     el.scrollIntoView({ block: 'center' });
     ${ghostOn() ? `${GHOST_LIB}
@@ -505,8 +565,14 @@ export async function read(maxChars = 6000, b?: BrowserName): Promise<string> {
   const code = `(() => {
     ${FRAMES}
     const main = document.querySelector('main, article, [role=main]') || document.body;
-    const frames = __docs().slice(1).map(d => d.body ? d.body.innerText || '' : '').filter(t => t.trim());
+    // Long option lists (a date picker's 200 years, every country) are noise here: browser_elements lists their options.
+    const long = __qa('select, [role=listbox]').filter(l => (l.options || l.children).length > 15 && l.style.display !== 'none');
+    long.forEach(l => { l.dataset.vcliDisplay = l.style.display; l.style.display = 'none'; });
+    const adFrame = d => { const f = d.defaultView && d.defaultView.frameElement;
+      return !!f && (/googlesyndication|doubleclick|googleadservices/i.test(f.src || '') || /google_ads|aswift/i.test((f.id || '') + (f.name || ''))); };
+    const frames = __docs().slice(1).filter(d => !adFrame(d)).map(d => d.body ? d.body.innerText || '' : '').filter(t => t.trim());
     const text = [main.innerText || '', ...frames].join('\\n\\n').replace(/\\n{3,}/g, '\\n\\n');
+    long.forEach(l => { l.style.display = l.dataset.vcliDisplay; delete l.dataset.vcliDisplay; });
     return JSON.stringify({ title: document.title, url: location.href, selection: String(getSelection() || ''), text: text.slice(0, ${maxChars}) });
   })()`;
   const page = JSON.parse(await js(code, b));
@@ -537,13 +603,23 @@ export async function select(target: string, option: string, b?: BrowserName): P
       return 'DONE:' + opt.text.trim();
     }
     window.__vcliPress(el);
-    return 'OPENED';
+    // A search box (react-select, MUI Autocomplete…): its options may only show after typing.
+    const input = el.tagName === 'INPUT' ? el : el.querySelector('input');
+    return input && (input.getAttribute('aria-autocomplete') || 'list') !== 'none' && input.type !== 'checkbox' ? 'OPENED_SEARCH' : 'OPENED';
   })()`, b);
   if (first === "NOT_FOUND") throw new Error(`No element "${target}". Call browser_elements again.`);
   if (first.startsWith("NO_OPTION:")) throw new Error(`No option "${option}". Options: ${first.slice(10)}`);
   if (first.startsWith("DONE:")) return `Selected "${first.slice(5)}"`;
-  await new Promise((r) => setTimeout(r, 350)); // popups render (and animate) after the press
-  const second = await js(`(() => {
+  // Popups render (and animate) after the press: look for the option as soon as it can be there, up to ~1 s.
+  const poll = async (ms: number) => {
+    let r = "";
+    for (const until = Date.now() + ms; ;) {
+      await new Promise((res) => setTimeout(res, 80));
+      r = await js(pickOption, b);
+      if (r.startsWith("DONE:") || Date.now() > until) return r;
+    }
+  };
+  const pickOption = `(() => {
     ${PRESS_LIB}
     const want = ${want};
     const vis = e => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
@@ -555,7 +631,83 @@ export async function select(target: string, option: string, b?: BrowserName): P
     hit.scrollIntoView({ block: 'nearest' });
     window.__vcliPress(hit);
     return 'DONE:' + text(hit);
-  })()`, b);
-  if (second.startsWith("NO_OPTION:")) throw new Error(`Opened the dropdown but found no option "${option}". Visible: ${second.slice(10) || "(none)"}`);
+  })()`;
+  // A search box gets one quick look (its full list may already be open), then typing; a plain dropdown up to ~1 s.
+  const second = await poll(first === "OPENED_SEARCH" ? 150 : 900);
+  if (second.startsWith("NO_OPTION:")) {
+    // A searchable dropdown (react-select, MUI Autocomplete…) only lists matches once you type: type the option.
+    const typed = await js(`(() => {
+      ${FRAMES}
+      const box = __q('[data-vcli=${JSON.stringify(target)}]');
+      const el = box && ('value' in box && box.tagName !== 'SELECT' ? box : box.querySelector('input'));
+      if (!el) return 'NO';
+      el.focus();
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      setter ? setter.call(el, ${JSON.stringify(option)}) : (el.value = ${JSON.stringify(option)});
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'TYPED';
+    })()`, b);
+    if (typed === "TYPED") {
+      const third = await poll(1500); // suggestions load (some ask the server)
+      if (third.startsWith("DONE:")) return `Selected "${third.slice(5)}"`;
+    }
+    throw new Error(`Opened the dropdown but found no option "${option}". Visible: ${second.slice(10) || "(none)"}`);
+  }
   return `Selected "${second.slice(5)}"`;
+}
+
+export interface FillField { target: string; value: string | boolean }
+
+/**
+ * Fills a form in one go: text fields are typed, dropdowns (native or custom, searchable or not) pick the option,
+ * checkboxes/radios/switches are set to on (true / "on") or off. Each field reports its own result; one failing
+ * doesn't stop the rest.
+ */
+export async function fill(fields: FillField[], b?: BrowserName): Promise<string[]> {
+  const browser = b ?? (await pick());
+  // One page call sets every text field and toggle (each round trip to the browser costs ~0.2 s); dropdowns, which
+  // open popups and wait for them, follow one by one.
+  const raw = await js(`(() => {
+    ${FRAMES}
+    ${PRESS_LIB}
+    const fields = ${JSON.stringify(fields)};
+    return JSON.stringify(fields.map(({ target, value }) => {
+      const el = __q('[data-vcli=' + JSON.stringify(target) + ']');
+      if (!el) return 'NOT_FOUND';
+      const role = el.getAttribute('role') || '', type = (el.type || '').toLowerCase();
+      const box = el.tagName === 'LABEL' ? (el.control || el.querySelector('input')) : el;
+      if (box && (['checkbox', 'radio'].includes((box.type || '').toLowerCase()) || ['checkbox', 'switch', 'radio'].includes(box.getAttribute('role') || ''))) {
+        const want = value === true || /^(on|true|yes|checked|1)$/i.test(String(value));
+        const on = box.checked ?? box.getAttribute('aria-checked') === 'true';
+        if (on !== want) { el.scrollIntoView({ block: 'center' }); window.__vcliPress(el); }
+        return want ? 'on' : 'off';
+      }
+      if (el.tagName === 'SELECT' || role === 'combobox' || (el.hasAttribute('aria-haspopup') && el.tagName !== 'INPUT')) return 'DROPDOWN';
+      if (!('value' in el)) return 'BUTTON';
+      el.focus();
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      setter ? setter.call(el, String(value)) : (el.value = String(value));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      // Close what typing opened (a date picker), with Tab: Escape would also close a dialog the form is in.
+      const tab = { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true, cancelable: true };
+      el.dispatchEvent(new KeyboardEvent('keydown', tab));
+      el.dispatchEvent(new KeyboardEvent('keyup', tab));
+      el.blur();
+      return 'typed';
+    }));
+  })()`, browser);
+  let first: string[];
+  try { first = JSON.parse(raw); } catch { first = fields.map(() => "DROPDOWN"); } // dump mode / odd page: one by one
+  const out: string[] = [];
+  for (const [i, { target, value }] of fields.entries()) {
+    const r = first[i];
+    if (r === "NOT_FOUND") out.push(`${target}: FAILED not found (call browser_elements again)`);
+    else if (r === "BUTTON") out.push(`${target}: FAILED is a button: use browser_click`);
+    else if (r === "DROPDOWN") {
+      try { out.push(`${target}: ${await select(target, String(value), browser)}`); }
+      catch (err) { out.push(`${target}: FAILED ${(err as Error).message ?? err}`); }
+    } else out.push(`${target}: ${r}`);
+  }
+  return out;
 }
