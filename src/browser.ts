@@ -331,6 +331,15 @@ const FRAMES = `const __docs = () => { const out = [document];
     return out; };
   const __qa = sel => __docs().flatMap(d => [...d.querySelectorAll(sel)]);
   const __q = sel => { for (const d of __docs()) { const e = d.querySelector(sel); if (e) return e; } return null; };
+  // The field a <label> stands for: its linked control, else the only text field next to it (labels that aren't linked).
+  const __fieldFor = l => { if (l.control) return l.control; const inner = l.querySelector('input, textarea, select'); if (inner) return inner;
+    let host = l.parentElement;
+    for (let i = 0; i < 3 && host; i++, host = host.parentElement) {
+      const fs = [...host.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, select')];
+      if (fs.length === 1) return fs[0];
+      if (fs.length > 1) return null;
+    }
+    return null; };
   const __rect = el => { const r = el.getBoundingClientRect(); let x = r.left, y = r.top, w = el.ownerDocument.defaultView;
     while (w && w !== window && w.frameElement) { const fr = w.frameElement.getBoundingClientRect(); x += fr.left; y += fr.top; w = w.parent; }
     return { left: x, top: y, width: r.width, height: r.height }; };`;
@@ -416,6 +425,17 @@ export const ELEMENTS_JS = `(() => {
     out.push(item);
     if (out.length >= 150) break;
   }
+  // Icon buttons made of a span/svg with a click handler (a table's edit and delete icons): named by their tooltip or
+  // label, clickable by their pointer cursor.
+  for (const el of __qa('[title], [aria-label]')) {
+    if (out.length >= 150) break;
+    if (el.hasAttribute('data-vcli') || el.closest('[data-vcli]') || el.querySelector('[data-vcli]') || !vis(el) || isAd(el)) continue;
+    if (el.ownerDocument.defaultView.getComputedStyle(el).cursor !== 'pointer') continue;
+    const text = (el.getAttribute('title') || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
+    if (!text) continue;
+    const id = 'e' + (++n); el.setAttribute('data-vcli', id);
+    out.push({ id, kind: 'button', text });
+  }
   return JSON.stringify(out);
 })()`;
 
@@ -492,7 +512,7 @@ export async function click(target: string, b?: BrowserName): Promise<string> {
     if (!el) return 'NOT_FOUND';
     if (el.tagName === 'SELECT') return 'USE_SELECT';
     ${PRESS_LIB}
-    const label = (el.labels?.[0]?.innerText || el.innerText || el.getAttribute('aria-label') || el.value || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 80);
+    const label = (el.labels?.[0]?.innerText || el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.value || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 80);
     el.scrollIntoView({ block: 'center' });
     ${ghostOn() ? `${GHOST_LIB}
     const r = __rect(el);
@@ -511,6 +531,7 @@ export async function type(target: string, text: string, submit = false, b?: Bro
     ${FRAMES}
     let el = __q('[data-vcli=${JSON.stringify(target)}]') || document.activeElement;
     while (el && el.contentDocument && el.contentDocument.activeElement) el = el.contentDocument.activeElement; // focus inside a frame
+    if (el && el.tagName === 'LABEL') el = __fieldFor(el) || el; // a label means its field
     if (!el || !('value' in el)) return 'NOT_FOUND';
     const text = ${JSON.stringify(text)};
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
@@ -672,9 +693,12 @@ export async function fill(fields: FillField[], b?: BrowserName): Promise<string
     ${PRESS_LIB}
     const fields = ${JSON.stringify(fields)};
     return JSON.stringify(fields.map(({ target, value }) => {
-      const el = __q('[data-vcli=' + JSON.stringify(target) + ']');
+      let el = __q('[data-vcli=' + JSON.stringify(target) + ']');
       if (!el) return 'NOT_FOUND';
-      const role = el.getAttribute('role') || '', type = (el.type || '').toLowerCase();
+      // A label means its field ("First Name" is often both the label and the field's placeholder).
+      if (el.tagName === 'LABEL') { const c = __fieldFor(el);
+        if (c && !['checkbox', 'radio'].includes((c.type || '').toLowerCase())) el = c; }
+      const role = el.getAttribute('role') || '';
       const box = el.tagName === 'LABEL' ? (el.control || el.querySelector('input')) : el;
       if (box && (['checkbox', 'radio'].includes((box.type || '').toLowerCase()) || ['checkbox', 'switch', 'radio'].includes(box.getAttribute('role') || ''))) {
         const want = value === true || /^(on|true|yes|checked|1)$/i.test(String(value));
