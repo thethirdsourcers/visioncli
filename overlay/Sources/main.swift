@@ -36,7 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     let meetingLauncher = MeetingLauncher()
     var meetingParakeet: ParakeetEngine? // started for Meeting Notes when no voice engine runs
     var meetingWhisper: WhisperEngine?
-    var meetingSTT = ""                  // the engine transcribing the meeting: parakeet | whisper | apple
+    var meetingSTT = ""
+    var menuOpen = false                 // the menu-bar menu is showing: nothing may resize the item or its menu
+    var titleWaiting = false             // a title update that came in while it was open                  // the engine transcribing the meeting: parakeet | whisper | apple
     var meetingConsented = false         // asked once per launch; Meeting Notes itself is never remembered
     let mascot = Mascot()
     let setupWizard = SetupWizard()

@@ -21,6 +21,17 @@ extension AppDelegate {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.updateStatusTitle() } // resets roll over
     }
 
+    // The open menu is laid out around the status item: changing the item's title (usage rings) or a view inside the
+    // menu while it shows sent AppKit into endless layout passes ("needing another Layout Window pass"), which
+    // crashed VisionCLI. Title updates wait until the menu closes.
+    func menuWillOpen(_ menu: NSMenu) { if menu === statusItem?.menu { menuOpen = true } }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === statusItem?.menu else { return }
+        menuOpen = false
+        if titleWaiting { titleWaiting = false; updateStatusTitle() }
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         syncModelFromTerminal()
@@ -109,7 +120,12 @@ extension AppDelegate {
             session: s.flatMap { p in session.map { (p, $0.resetsAt) } }, week: w.flatMap { p in week.map { (p, $0.resetsAt) } },
             today: u.today, updated: gemini ? AgyUsage.shared.updated : u.updated,
             gemini: gemini ? AgyUsage.shared.groups.filter { $0.name != active?.name } : nil))
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        // A fixed size, no Auto Layout constraints: a hosting view that keeps proposing sizes fights the menu window's
+        // own layout (one of the "Layout Window pass" crashes).
+        let size = host.fittingSize
+        host.sizingOptions = []
+        host.frame = NSRect(origin: .zero, size: size)
+        host.autoresizingMask = []
         card.view = host
         sub.addItem(card)
         sub.addItem(.separator())
@@ -138,6 +154,7 @@ extension AppDelegate {
 
     /// Project name next to the menu-bar icon.
     func updateStatusTitle() {
+        if menuOpen { titleWaiting = true; return }
         let name = HomeProject.label(currentProject)
         let title = " " + (name.count > 18 ? String(name.prefix(17)) + "…" : name)
         let u = UsageTracker.shared
