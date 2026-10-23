@@ -75,6 +75,12 @@ describe("sameUrl", () => {
     assert.ok(sameUrl("https://www.GitHub.com/org/", "http://github.com/org#readme"));
   });
 
+  test("a route in the fragment matters (Gmail, hash routers)", () => {
+    assert.ok(!sameUrl("https://mail.google.com/mail/u/0/#inbox", "https://mail.google.com/mail/u/0/#search/signpath"));
+    assert.ok(!sameUrl("https://app.dev/#/a", "https://app.dev/#/b"));
+    assert.ok(sameUrl("https://app.dev/#/a", "https://app.dev/#/a"));
+  });
+
   test("path and query still matter", () => {
     assert.ok(!sameUrl("https://x.dev/a", "https://x.dev/b"));
     assert.ok(!sameUrl("https://x.dev/a?x=1", "https://x.dev/a"));

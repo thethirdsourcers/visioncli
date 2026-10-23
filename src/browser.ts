@@ -191,7 +191,8 @@ export async function switchTo(tabId: string, b?: BrowserName) {
 const AGENT_TAB = join(CONFIG_DIR, "agent-tab.json");
 /** Same page, ignoring scheme, www., trailing slashes, #fragment and case. */
 export const sameUrl = (a: string, b: string) => {
-  const norm = (u: string) => u.replace(/#.*$/, "").replace(/\/+$/, "").replace(/^https?:\/\/(www\.)?/i, "").toLowerCase();
+  // A plain anchor (#readme) is the same page; a route in the fragment (Gmail's #search/…, #/settings, #!) isn't.
+  const norm = (u: string) => u.replace(/#(?![^#]*[/!=]).*$/, "").replace(/\/+$/, "").replace(/^https?:\/\/(www\.)?/i, "").toLowerCase();
   return norm(a) === norm(b);
 };
 
@@ -253,7 +254,9 @@ async function settle(browser: BrowserName, before: PageState | null, ms = 4000,
  *  document has its own performance.timeOrigin, so a new page on the same site counts and the old one doesn't. */
 export function loadedFrom(state: { ready: string; href: string; doc?: number }, url: string, previousDoc?: number): boolean {
   if (state.ready !== "complete") return false;
-  if (previousDoc !== undefined && state.doc === previousDoc) return false;
+  // The same document is fine when it's now showing the address asked for: a route in the fragment (Gmail's
+  // #search/…) changes the page without loading a new one.
+  if (previousDoc !== undefined && state.doc === previousDoc) return sameUrl(state.href, url) && /#.*[/!=]/.test(url);
   try { return new URL(state.href).host.replace(/^www\./, "") === new URL(url).host.replace(/^www\./, ""); } catch { return false; }
 }
 
@@ -566,9 +569,15 @@ const GHOST_OFF = join(CONFIG_DIR, "ghost-off");
 const ghostOn = () => !existsSync(GHOST_OFF);
 
 /** Page-side helper (defined once per page): window.__vcliGhost(x, y, then) moves the ghost and calls `then`. */
-const GHOST_LIB = `if (!window.__vcliGhost) {
+// Built with DOM calls, not innerHTML: pages with Trusted Types (Gmail, Google Docs) refuse innerHTML, and the
+// script would stop before the click. Anything else that fails only loses the cursor (try/catch), never the action.
+const GHOST_LIB = `if (!window.__vcliGhost) try {
   const g = document.createElement('div');
-  g.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 2.5 L5 19.5 L9.4 15.4 L12.3 21.8 L15 20.6 L12.2 14.3 L18.4 14.1 Z" fill="rgba(255,255,255,.92)" stroke="#22d3ee" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'), path = document.createElementNS(NS, 'path');
+  for (const [k, v] of [['width', '24'], ['height', '24'], ['viewBox', '0 0 24 24']]) svg.setAttribute(k, v);
+  for (const [k, v] of [['d', 'M5 2.5 L5 19.5 L9.4 15.4 L12.3 21.8 L15 20.6 L12.2 14.3 L18.4 14.1 Z'], ['fill', 'rgba(255,255,255,.92)'],
+    ['stroke', '#22d3ee'], ['stroke-width', '1.5'], ['stroke-linejoin', 'round']]) path.setAttribute(k, v);
+  svg.appendChild(path); g.appendChild(svg);
   Object.assign(g.style, { position: 'fixed', left: '0', top: '0', zIndex: 2147483647, pointerEvents: 'none', opacity: '0',
     filter: 'drop-shadow(0 0 6px rgba(34,211,238,.85)) drop-shadow(0 0 2px rgba(168,85,247,.8))',
     transition: 'transform .42s cubic-bezier(.25,.8,.25,1), opacity .25s ease',
@@ -594,7 +603,7 @@ const GHOST_LIB = `if (!window.__vcliGhost) {
       }
     }, 450);
   };
-}`;
+} catch (e) { window.__vcliGhost = (x, y, then) => { then && then(); }; }`;
 
 /**
  * Page-side "real" press: custom widgets (React/Radix/MUI dropdowns, switches) often listen to pointerdown/mousedown,
