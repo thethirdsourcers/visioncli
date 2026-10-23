@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
-import { fillKWinScript, parseKWinSnapshot } from "../../src/main/desktop/windows/kde";
+import { bridgeName, fillKWinScript, parseKWinSnapshot } from "../../src/main/desktop/windows/kde";
 import { toLegacyExtension } from "../../src/main/desktop/windows/gnome";
 import { resourcesDir } from "../../src/main/desktop/windows/common";
 
@@ -131,4 +131,9 @@ test("GNOME extension ESM form and KWin script are valid JavaScript", () => {
   writeFileSync(join(dir, "legacy.js"), toLegacyExtension(extension));
   writeFileSync(join(dir, "kwin.js"), kwinScript);
   for (const f of ["extension.mjs", "legacy.js", "kwin.js"]) execFileSync(process.execPath, ["--check", join(dir, f)]);
+});
+
+test("KWin bridge name: under the app id inside the Flatpak (the only names it may own)", () => {
+  assert.equal(bridgeName({}, 42), "dev.visioncli.KWinBridge.p42");
+  assert.equal(bridgeName({ FLATPAK_ID: "com.thethirdsourcers.VisionCLI" }, 42), "com.thethirdsourcers.VisionCLI.KWinBridge.p42");
 });

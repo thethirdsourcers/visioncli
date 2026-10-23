@@ -39,6 +39,8 @@ touch "$OUT/.nojekyll" # plain files: no Jekyll processing (it would hide dists/
 cp "$here/../../docs/logo.png" "$OUT/logo.png"
 cp "$here/../../docs/brand/mark.svg" "$OUT/mark.svg"
 cp "$here/privacy.html" "$OUT/privacy.html"
+# The app's screenshots: the Flatpak metainfo (and so Flathub, GNOME Software, Discover) points at these.
+cp -R "$here/screenshots" "$OUT/screenshots"
 
 repos=no
 if [ -n "${PACKAGES_GPG_PRIVATE_KEY:-}" ]; then

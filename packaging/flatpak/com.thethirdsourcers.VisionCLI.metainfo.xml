@@ -28,11 +28,14 @@
     </p>
   </description>
   <launchable type="desktop-id">com.thethirdsourcers.VisionCLI.desktop</launchable>
-  <icon type="remote" width="256" height="256">https://visioncli.thethirdsourcers.com/logo.png</icon>
   <url type="homepage">https://visioncli.thethirdsourcers.com</url>
   <url type="bugtracker">https://github.com/thethirdsourcers/visioncli/issues</url>
   <url type="vcs-browser">https://github.com/thethirdsourcers/visioncli</url>
   <url type="contact">https://thethirdsourcers.com</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#c9d6ff</color>
+    <color type="primary" scheme_preference="dark">#2b3a80</color>
+  </branding>
   <update_contact>visioncli@thethirdsourcers.com</update_contact>
   <categories>
     <category>Development</category>
@@ -53,7 +56,7 @@
   <recommends>
     <internet>first-run</internet>
   </recommends>
-  <!-- Placeholders: Flathub needs real screenshots at these URLs (the site's screenshots/ folder) before submission. -->
+  <!-- Served from packaging/site/screenshots; Flathub mirrors them at build time. -->
   <screenshots>
     <screenshot type="default">
       <caption>Asking about the code on screen, answered in the bubble</caption>

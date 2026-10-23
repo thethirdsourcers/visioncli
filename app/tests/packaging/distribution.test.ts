@@ -143,14 +143,21 @@ test("flatpak manifest: id, runtime, the permissions the app needs, the launcher
   const m = yaml.load(read("packaging/flatpak/com.thethirdsourcers.VisionCLI.yml"));
   assert.equal(m.id, "com.thethirdsourcers.VisionCLI");
   assert.equal(m.runtime, "org.freedesktop.Platform");
-  assert.equal(m["runtime-version"], "24.08");
+  assert.equal(m["runtime-version"], "26.08");
+  assert.equal(m["base-version"], m["runtime-version"]);
   assert.equal(m.base, "org.electronjs.Electron2.BaseApp");
   for (const a of ["--socket=x11", "--socket=wayland", "--socket=pulseaudio", "--device=all", "--filesystem=home",
-    "--talk-name=org.freedesktop.portal.*", "--talk-name=org.a11y.Bus", "--talk-name=org.kde.KWin", "--own-name=dev.visioncli.*",
+    "--talk-name=org.a11y.Bus", "--talk-name=org.kde.KWin", "--talk-name=dev.visioncli.Shell",
     "--talk-name=org.freedesktop.Flatpak"]) assert.ok(m["finish-args"].includes(a), a);
+  // Flathub's linter rejects these outright: portals need no talk-name, and only names under the app id may be owned.
+  for (const a of m["finish-args"]) assert.doesNotMatch(a, /^--talk-name=org\.freedesktop\.portal\.|^--own-name=/, a);
   const archives = m.modules[0].sources.filter((s: any) => s.type === "archive");
   assert.deepEqual(archives.map((s: any) => s["only-arches"][0]).sort(), ["aarch64", "x86_64"]);
-  for (const s of archives) assert.match(s.url, /releases\/download\/v[\d.]+\/VisionCLI-[\d.]+-linux-(x64|arm64)\.tar\.gz$/);
+  for (const s of archives) {
+    assert.match(s.url, /releases\/download\/v[\d.]+\/VisionCLI-[\d.]+-linux-(x64|arm64)\.tar\.gz$/);
+    assert.match(s.sha256, /^[0-9a-f]{64}$/);
+    assert.notEqual(s.sha256, "0".repeat(64));
+  }
   const launcher = read("packaging/flatpak/visioncli.sh");
   assert.match(launcher, /zypak-wrapper \/app\/VisionCLI\/visioncli\.bin/);
   assert.match(launcher, /XDG_CONFIG_HOME="\$HOME\/\.config"/);
@@ -163,6 +170,12 @@ test("flatpak metainfo: homepage, developer, contact, releases match the changel
   assert.match(x, /<url type="homepage">https:\/\/visioncli\.thethirdsourcers\.com<\/url>/);
   assert.match(x, /<developer id="com\.thethirdsourcers">\s*<name>Third Sourcers<\/name>/);
   assert.match(x, /visioncli@thethirdsourcers\.com/);
+  assert.doesNotMatch(x, /<icon type="remote"/); // Flathub uses the installed icon; a remote one fails its linter
+  assert.match(x, /<branding>[\s\S]*scheme_preference="light"[\s\S]*scheme_preference="dark"/);
+  assert.match(x, /<content_rating type="oars-1\.1"/);
+  // The screenshots are the site's (packaging/site/screenshots), so each one must exist there.
+  for (const [, f] of x.matchAll(/<image>https:\/\/visioncli\.thethirdsourcers\.com\/screenshots\/([^<]+)<\/image>/g))
+    assert.ok(existsSync(join(ROOT, "packaging/site/screenshots", f)), f);
   const version = JSON.parse(read("package.json")).version;
   assert.match(x, new RegExp(`<release version="${version.replace(/\./g, "\\.")}"`), "metainfo lists the current version");
 });

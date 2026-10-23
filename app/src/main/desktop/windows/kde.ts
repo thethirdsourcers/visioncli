@@ -1,5 +1,5 @@
 // KDE Plasma on Wayland: KWin runs scripts but doesn't let apps list windows or read the pointer. VisionCLI exports
-// a tiny D-Bus service (dev.visioncli.KWinBridge.p<pid>), loads resources/kwin/visioncli-query.js through
+// a tiny D-Bus service (dev.visioncli.KWinBridge.p<pid>, under the app id in the Flatpak), loads resources/kwin/visioncli-query.js through
 // org.kde.kwin.Scripting with the request filled in, and the script answers by callDBus. One round trip gives the
 // windows, the active window, the cursor and the screens; it's cached briefly since callers ask for several at once.
 // Capture: spectacle in background mode (KWin allows it the ScreenShot2 interface it restricts for other apps),
@@ -19,6 +19,11 @@ import { prettyApp } from "./sway";
 
 const BRIDGE_PATH = "/dev/visioncli/KWinBridge";
 const BRIDGE_IFACE = "dev.visioncli.KWinBridge";
+
+/** The bridge's bus name; inside the Flatpak it's under the app id, the only names a sandboxed app may own. */
+export function bridgeName(env: NodeJS.ProcessEnv = process.env, pid = process.pid): string {
+  return `${env.FLATPAK_ID || "dev.visioncli"}.KWinBridge.p${pid}`;
+}
 
 interface KWinWindow {
   id: string; resourceClass: string; resourceName: string; desktopFile: string; caption: string; pid: number;
@@ -68,7 +73,7 @@ export class KdeDesktop implements Desktop {
     private shot: PngSource = portalScreenshot,
   ) {}
 
-  /** Exports dev.visioncli.KWinBridge.p<pid> with Report(token, json), once. */
+  /** Exports bridgeName() with Report(token, json), once. */
   private async ensureBridge() {
     if (this.bridge) return this.bridge;
     const dbus = await dbusNext();
@@ -80,7 +85,7 @@ export class KdeDesktop implements Desktop {
       }
     }
     Bridge.configureMembers({ methods: { Report: { inSignature: "ss", outSignature: "" } } });
-    const name = `dev.visioncli.KWinBridge.p${process.pid}`;
+    const name = bridgeName();
     bus.export(BRIDGE_PATH, new Bridge(BRIDGE_IFACE));
     await bus.requestName(name, dbus.NameFlag.DO_NOT_QUEUE);
     return (this.bridge = { bus, name });
