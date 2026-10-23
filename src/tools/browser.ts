@@ -160,6 +160,18 @@ export function register(server: McpServer) {
   );
 
   server.registerTool(
+    "browser_upload",
+    {
+      title: "Upload a file",
+      description: "Attach a file from this computer to the page's file picker: target is the upload button, drop zone or file " +
+        "input (id from browser_elements). Pages can't open the file dialog from a script, so on macOS this clicks for real and " +
+        "picks the file in the dialog (the user approves).",
+      inputSchema: { target: z.string().describe("Element id like e12"), path: z.string().describe("Absolute path of the file (or ~/…)") },
+    },
+    wrap(async ({ target, path }) => browser.upload(target, path)),
+  );
+
+  server.registerTool(
     "browser_fill",
     {
       title: "Fill in a form",

@@ -129,6 +129,14 @@ export class CdpTabs {
     else await this.evaluate(t, action === "back" ? "history.back()" : "history.forward()");
   }
 
+  /** Puts files in a file input (found by `expression` in the active tab), the way choosing them in the dialog does. */
+  async setFiles(expression: string, files: string[]) {
+    const t = await this.front(), sessionId = await this.session(t);
+    const r = await this.cdp.send<any>("Runtime.evaluate", { expression, returnByValue: false }, sessionId);
+    if (!r.result?.objectId) throw new Error("No file input for that element.");
+    await this.cdp.send("DOM.setFileInputFiles", { files, objectId: r.result.objectId }, sessionId);
+  }
+
   async js(code: string): Promise<string> {
     return asText(await this.evaluate(await this.front(), code));
   }

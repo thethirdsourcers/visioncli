@@ -758,7 +758,12 @@ export async function read(maxChars = 6000, b?: BrowserName): Promise<string> {
     const adFrame = d => { const f = d.defaultView && d.defaultView.frameElement;
       return !!f && (/googlesyndication|doubleclick|googleadservices/i.test(f.src || '') || /google_ads|aswift/i.test((f.id || '') + (f.name || ''))); };
     const frames = __docs().slice(1).filter(d => !adFrame(d)).map(d => d.body ? d.body.innerText || '' : '').filter(t => t.trim());
-    const text = [main.innerText || '', ...frames].join('\\n\\n').replace(/\\n{3,}/g, '\\n\\n');
+    // An open dialog drawn outside the main content (most are: portals at the end of the page) is read first: it's
+    // what the user is looking at, and <main> alone missed it.
+    const dialogs = __qa('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]')
+      .filter(d => d.offsetWidth > 0 && !main.contains(d) && !d.parentElement?.closest('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]'));
+    const dialogText = dialogs.map(d => '[Open dialog]\\n' + (d.innerText || '').trim()).filter(t => t.length > 15);
+    const text = [...dialogText, main.innerText || '', ...frames].join('\\n\\n').replace(/\\n{3,}/g, '\\n\\n');
     long.forEach(l => { l.style.display = l.dataset.vcliDisplay; delete l.dataset.vcliDisplay; });
     shown.forEach(t => t.remove());
     return JSON.stringify({ title: document.title, url: location.href, selection: String(getSelection() || ''), text: text.slice(0, ${maxChars}) });
@@ -1033,4 +1038,70 @@ export async function drag(from: string, to: string, b?: BrowserName): Promise<s
   if (r === "NO_SOURCE") throw new Error(`Nothing to drag matching "${from}".`);
   if (r === "NO_TARGET") throw new Error(`No drop target matching "${to}".`);
   return r.slice(3);
+}
+
+/** The file input an element stands for: itself, one inside it (a drop zone), its label's, or the page's only one. */
+const FILE_INPUT_JS = (target: string) => `(() => {
+  ${FRAMES}
+  const el = __q('[data-vcli=' + ${JSON.stringify(JSON.stringify(target))} + ']');
+  const isFile = e => e && e.tagName === 'INPUT' && e.type === 'file';
+  if (isFile(el)) return el;
+  const near = el && (el.querySelector('input[type=file]') || (el.tagName === 'LABEL' && el.control) ||
+    el.closest('form, [role=dialog], dialog, section, div')?.querySelector('input[type=file]'));
+  if (isFile(near)) return near;
+  const all = __qa('input[type=file]');
+  return all.length === 1 ? all[0] : null;
+})()`;
+
+/**
+ * Uploads a file through a page's file picker: `target` is the upload button, drop zone or file input (an id from
+ * elements()). Over Chrome's DevTools connection (Linux, Windows) the file is set on the input directly. On macOS
+ * pages can't be given files, so it clicks the button for real and picks the file in the macOS dialog by keyboard
+ * (Go to Folder, the folder, then the file's name), through the app's computer control (the user approves).
+ */
+export async function upload(target: string, filePath: string, b?: BrowserName): Promise<string> {
+  const { existsSync: exists, statSync } = await import("node:fs");
+  const { resolve: abs, basename, dirname: dir } = await import("node:path");
+  const file = abs(filePath.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+  if (!exists(file) || !statSync(file).isFile()) throw new Error(`No file at ${file}.`);
+  const browser = b ?? (await pick());
+  const got = async () => js(`(() => { const i = ${FILE_INPUT_JS(target)}; return i && i.files && i.files.length ? [...i.files].map(f => f.name).join(', ') : ''; })()`, browser).catch(() => "");
+  if (!APPLESCRIPT) {
+    await daemon(browser, "files", FILE_INPUT_JS(target), [file]);
+    await js(`(() => { const i = ${FILE_INPUT_JS(target)}; if (i) { i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); } return 'ok'; })()`, browser);
+    return `Attached ${basename(file)}`;
+  }
+  // macOS: where to click (the visible trigger: the element, else the file input's label or the button next to it).
+  const at = JSON.parse(await js(`(() => {
+    ${FRAMES}
+    let el = __q('[data-vcli=' + ${JSON.stringify(JSON.stringify(target))} + ']');
+    if (!el) return 'null';
+    const shown = e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4 && getComputedStyle(e).visibility !== 'hidden'; };
+    if (!shown(el)) el = (el.labels && [...el.labels].find(shown)) || [...(el.parentElement || document).querySelectorAll('button, label, [role=button]')].find(shown) || el;
+    __reveal(el);
+    const r = __rect(el);
+    const top = screenY + (outerHeight - innerHeight), left = screenX + (outerWidth - innerWidth) / 2;
+    return JSON.stringify({ x: Math.round(left + r.left + r.width / 2), y: Math.round(top + r.top + Math.min(r.height / 2, 20)) });
+  })()`, browser) || "null");
+  if (!at) throw new Error(`No element "${target}". Call browser_elements again.`);
+  const { send } = await import("./control.js");
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await send({ action: "click", x: at.x, y: at.y }); // a real click: browsers only open the file dialog for one
+  await pause(1200);
+  await send({ action: "key", keys: "cmd+shift+g" });
+  await pause(600);
+  await send({ action: "key", keys: "cmd+a delete" });
+  await send({ action: "type", text: dir(file) + "/" }); // the folder: Go to Folder doesn't take a file's path
+  await pause(700);
+  await send({ action: "key", keys: "return" });
+  await pause(900);
+  await send({ action: "type", text: basename(file) }); // typing a name selects it in the list
+  await pause(500);
+  await send({ action: "key", keys: "return" });
+  for (let i = 0; i < 10; i++) {
+    await pause(300);
+    const names = await got();
+    if (names) return `Attached ${names}`;
+  }
+  return `Picked ${basename(file)} in the file dialog; the page didn't show a file input with it (it may upload straight away: check the page).`;
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { ELEMENTS_JS, drag, fill, hover, loadedFrom, read, sameUrl, select, serial, shortHrefFor, type, zipTabs } from "../src/browser.js";
+import { ELEMENTS_JS, drag, fill, hover, upload, loadedFrom, read, sameUrl, select, serial, shortHrefFor, type, zipTabs } from "../src/browser.js";
 
 describe("shortHrefFor", () => {
   test("same host: just path + short query", () => {
@@ -149,6 +149,7 @@ describe("page scripts", () => {
     await dump(() => fill([{ target: "e3", value: "Grace" }, { target: "e9", value: true }, { target: "e5", value: "Maths" }], "Google Chrome"));
     await dump(() => hover("e4", "Google Chrome"));
     await dump(() => drag("e2", "Drop here", "Google Chrome"));
+    await dump(() => upload("e3", "package.json", "Google Chrome"));
     scripts.push(ELEMENTS_JS);
     assert.ok(scripts.length >= 6);
     for (const s of scripts) assert.doesNotThrow(() => new Function(`return ${s}`), s.slice(0, 120));

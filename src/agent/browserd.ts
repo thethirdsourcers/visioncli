@@ -148,6 +148,7 @@ export async function serve() {
         req.rpc === "targets" ? (await t.pages()).map((p) => p.targetId) :
         req.rpc === "navigate" ? await t.navigate(a[0]) :
         req.rpc === "js" ? await t.js(a[0]) :
+        req.rpc === "files" ? await t.setFiles(a[0], a[1]) :
         (() => { throw new Error(`Unknown browser call ${req.rpc}`); })();
       sock.end(JSON.stringify({ ok: true, result: result ?? null }) + "\n");
     } catch (err) {
