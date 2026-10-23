@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisionCLI</title>
+<meta name="description" content="An AI co-assistant for developers that sees your screen and uses your computer. Ask by voice or text, with Claude Code or Gemini. macOS, Windows and Linux.">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="logo.png">
+<meta property="og:title" content="VisionCLI">
+<meta property="og:description" content="Ask about what you see. Let AI do the rest.">
+<meta property="og:image" content="https://visioncli.thethirdsourcers.com/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page: #e7e9f1; --card: #f3f3f7; --ink: #2b3a80; --text: #3d4566; --muted: #7b819a; --line: #dcdfea;
+    --chip: #ffffff; --code: #e9ebf3; --accent: #4c5fe0; --accent2: #9dbbff; --shadow: 0 30px 80px rgba(43, 58, 128, .10);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --page: #05060c; --card: #0d1024; --ink: #c9d6ff; --text: #b4bbd6; --muted: #7d84a3; --line: #1d2244;
+    --chip: #141936; --code: #11152d; --accent: #8fa9ff; --accent2: #5468f0; --shadow: 0 30px 80px rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #05060c; --card: #0d1024; --ink: #c9d6ff; --text: #b4bbd6; --muted: #7d84a3; --line: #1d2244;
+      --chip: #141936; --code: #11152d; --accent: #8fa9ff; --accent2: #5468f0; --shadow: 0 30px 80px rgba(0, 0, 0, .45);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--page); }
+  body { overflow-x: hidden; margin: 0; font: 300 17px/1.6 Outfit, system-ui, sans-serif; color: var(--text); background: radial-gradient(1200px 600px at 75% -10%, rgba(76, 95, 224, .10), transparent 60%), var(--page); }
+  a { color: var(--ink); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 32px 24px 64px; }
+  .card { background: var(--card); box-shadow: var(--shadow); min-height: 100vh; min-height: 100svh; display: flex; }
+  .card .inner { width: 100%; max-width: 1240px; margin: 0 auto; padding: 36px clamp(22px, 6vw, 96px) 44px; display: flex; flex-direction: column; }
+  .card .hero { flex: 1; }
+
+  nav { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 300 22px Outfit; color: var(--ink); letter-spacing: -.2px; }
+  .brand b { font-weight: 600; }
+  .brand img { width: 30px; height: 30px; }
+  nav .links { margin-left: auto; display: flex; gap: clamp(16px, 5vw, 72px); }
+  nav .links a { text-decoration: none; font: 400 13px Outfit; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  nav .links a:hover { color: var(--ink); }
+
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: center; gap: 24px; min-height: 560px; margin-top: 56px; }
+  h1 { margin: 0; font: 200 clamp(42px, 6vw, 72px)/1.08 Outfit; color: var(--ink); letter-spacing: -1.5px; }
+  h1 b { font-weight: 600; }
+  .lead { max-width: 30em; margin: 22px 0 30px; color: var(--text); }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 999px; text-decoration: none; font: 400 15px Outfit; }
+  .btn.primary { background: var(--ink); color: var(--card); }
+  .btn.ghost { color: var(--ink); border: 1px solid var(--line); background: var(--chip); }
+  .btn:hover { filter: brightness(1.08); }
+  .sphere { position: relative; aspect-ratio: 1; width: 100%; max-width: 620px; justify-self: center; }
+  .sphere { min-width: 0; }
+  .sphere canvas { width: 100%; height: 100%; max-width: 100%; display: block; }
+  .dots { display: flex; gap: 10px; margin-top: 34px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); opacity: .7; }
+  .dots i.on { background: var(--ink); opacity: 1; }
+
+  .strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 36px; }
+  .strip .k { font: 400 12px Outfit; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .strip .v { margin-top: 6px; color: var(--ink); font-weight: 400; }
+  .strip .v a { text-decoration: none; }
+
+  section { margin-top: 72px; }
+  h2 { font: 200 clamp(30px, 4vw, 44px)/1.15 Outfit; color: var(--ink); margin: 0 0 8px; letter-spacing: -.8px; }
+  h2 b { font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .feature { background: var(--chip); border: 1px solid var(--line); border-radius: 22px; padding: 22px 22px 18px; }
+  .feature h3 { margin: 0 0 6px; font: 600 17px Outfit; color: var(--ink); }
+  .feature p { margin: 0; font-size: 15px; }
+  kbd { font: 400 13px "JetBrains Mono", ui-monospace, monospace; padding: 1px 7px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; background: var(--card); color: var(--ink); }
+
+  .os { background: var(--chip); border: 1px solid var(--line); border-radius: 22px; padding: 24px; margin-bottom: 18px; }
+  .os h3 { margin: 0 0 12px; font: 600 19px Outfit; color: var(--ink); }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .downloads a { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); text-decoration: none; font: 400 14px Outfit; }
+  .downloads a:hover { border-color: var(--accent); }
+  pre { background: var(--code); border-radius: 14px; padding: 14px 16px; overflow-x: auto; font: 13px/1.6 "JetBrains Mono", ui-monospace, monospace; margin: 10px 0; color: var(--ink); }
+  code { font: 13.5px "JetBrains Mono", ui-monospace, monospace; }
+  .note { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+  .os p { margin: 10px 0 0; }
+
+  footer { margin-top: 56px; display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+  .theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 4px 12px; font: 400 13px Outfit; cursor: pointer; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; margin-top: 28px; }
+    .sphere { max-width: 420px; order: -1; margin-top: 8px; }
+    .grid, .strip { grid-template-columns: minmax(0, 1fr); }
+    nav .links { margin-left: 0; width: 100%; gap: 18px; flex-wrap: wrap; }
+    nav .links a { font-size: 12px; letter-spacing: .1em; }
+    .card { min-height: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="card"><div class="inner">
+    <nav>
+      <a class="brand" href="#"><img src="mark.svg" alt=""><span>Vision<b>CLI</b></span></a>
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#install">Download</a>
+        <a href="https://github.com/thethirdsourcers/visioncli#readme">Docs</a>
+        <a href="https://github.com/thethirdsourcers/visioncli">GitHub</a>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <div>
+        <h1>Ask about<br><b>what you see.</b><br>Let <b>AI</b> do<br>the rest.</h1>
+        <p class="lead">VisionCLI sees your screen and uses your computer. Hold a key and ask about the file, error or page in front of you, or have it do the task: with Claude Code or Gemini, by voice or by typing.</p>
+        <div class="cta">
+          <a class="btn primary" id="primary" href="#install">Download VisionCLI</a>
+          <a class="btn ghost" href="#install">All platforms</a>
+        </div>
+        <div class="dots" aria-hidden="true"><i></i><i></i><i class="on"></i><i></i></div>
+      </div>
+      <div class="sphere"><canvas id="sphere" aria-label="An animated sphere of points"></canvas></div>
+    </div>
+
+    <div class="strip">
+      <div><div class="k">Latest</div><div class="v"><a href="https://github.com/thethirdsourcers/visioncli/releases/tag/v0.11.1">Version 0.11.1 release notes</a></div></div>
+      <div><div class="k">Works with</div><div class="v">Claude Code · Gemini (Antigravity)</div></div>
+      <div><div class="k">Runs on</div><div class="v">macOS · Windows · Linux</div></div>
+    </div>
+</div></div>
+<div class="wrap">
+
+  <section id="features">
+    <h2>Your screen, <b>understood.</b></h2>
+    <p class="sub">Everything happens on your computer, with the AI you already use.</p>
+    <div class="grid">
+      <div class="feature"><h3>Hold a key, ask</h3><p>Hold <kbd>⌥</kbd> / <kbd>Alt</kbd> and ask out loud. Add <kbd>⌘</kbd> / <kbd>Win</kbd> to include a screenshot. The answer appears in a bubble and is read aloud.</p></div>
+      <div class="feature"><h3>Sees what you mean</h3><p>"What is this file for?" It looks at the window under your mouse, finds the real file in your project and answers with file:line references.</p></div>
+      <div class="feature"><h3>Uses your computer</h3><p>Clicks, types and opens apps one checked step at a time. You approve each action, passwords always ask, and Esc stops it instantly.</p></div>
+      <div class="feature"><h3>Points and draws</h3><p>Answers draw boxes, arrows and numbered steps on your real screen, and can include Mermaid diagrams.</p></div>
+      <div class="feature"><h3>Fast browser control</h3><p>"Open the Stripe tab", "find a stay in Lisbon with a pool": quick commands and multi-step tasks in Chrome, Brave and Edge.</p></div>
+      <div class="feature"><h3>Local voices</h3><p>Parakeet and Whisper transcription and Kokoro voices run on your machine. Your audio isn't sent anywhere.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Download <b>VisionCLI</b></h2>
+    <p class="sub">Free and open source (MIT). Version 0.11.1.</p>
+
+    <div class="os" id="macos">
+      <h3>macOS 13 or later</h3>
+      <div class="downloads"><a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.0/VisionCLI-0.11.0-macos.dmg">Download .dmg</a></div>
+      <pre>brew install --cask thethirdsourcers/tap/visioncli</pre>
+      <p class="note">VisionCLI isn't notarized by Apple yet, so macOS asks before the first launch: System Settings → Privacy &amp; Security → <b>Open Anyway</b>, or run <code>xattr -dr com.apple.quarantine /Applications/VisionCLI.app</code>.</p>
+    </div>
+
+    <div class="os" id="windows">
+      <h3>Windows 10 / 11 (x64 and Arm)</h3>
+      <div class="downloads">
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-windows-x64.exe">Installer x64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-windows-arm64.exe">Installer Arm64</a>
+      </div>
+      <pre>winget install TheThirdSourcers.VisionCLI</pre>
+      <p class="note">Installs for your user only, no admin rights.</p>
+    </div>
+
+    <div class="os" id="linux">
+      <h3>Linux (x86_64 and arm64)</h3>
+      <div class="downloads">
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-x86_64.AppImage">AppImage x86_64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-arm64.AppImage">AppImage arm64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-amd64.deb">.deb amd64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-arm64.deb">.deb arm64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-x86_64.rpm">.rpm x86_64</a>
+        <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-linux-aarch64.rpm">.rpm aarch64</a>
+      </div>
+<!-- repos -->
+      <p><b>Debian / Ubuntu</b> (apt repository, updates with the system):</p>
+      <pre>curl -fsSL https://visioncli.thethirdsourcers.com/public.key | sudo gpg --dearmor -o /usr/share/keyrings/visioncli.gpg
+echo "deb [signed-by=/usr/share/keyrings/visioncli.gpg] https://visioncli.thethirdsourcers.com stable main" | sudo tee /etc/apt/sources.list.d/visioncli.list
+sudo apt update &amp;&amp; sudo apt install visioncli-linux</pre>
+      <p><b>Fedora / RHEL / openSUSE</b> (dnf or zypper repository):</p>
+      <pre>sudo curl -fsSL -o /etc/yum.repos.d/visioncli.repo https://visioncli.thethirdsourcers.com/visioncli.repo
+sudo dnf install visioncli-linux</pre>
+<!-- /repos -->
+      <p class="note">Then start VisionCLI from your app menu; its setup wizard checks the desktop tools it needs. Details in <a href="https://github.com/thethirdsourcers/visioncli/blob/main/docs/LINUX.md">docs/LINUX.md</a>.</p>
+    </div>
+
+    <div class="os" id="code-signing">
+      <h3>Code signing policy</h3>
+      <p>Windows releases: free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+      <p class="note">Every release is built by GitHub Actions from this public repository; nothing is built or signed on a personal machine. Committers and reviewers: the maintainers of <a href="https://github.com/thethirdsourcers">thethirdsourcers</a> on GitHub. Approver for each signed release: Manjit Shakya (Third Sourcers). See also the <a href="privacy.html">privacy policy</a>.</p>
+    </div>
+
+    <div class="os">
+      <h3>Check a download</h3>
+      <p>Every file is listed in <a href="https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/SHA256SUMS.txt">SHA256SUMS.txt</a> and carries a build provenance attestation from the GitHub workflow that built it:</p>
+      <pre>gh attestation verify VisionCLI-0.11.0-macos.dmg -R thethirdsourcers/visioncli</pre>
+    </div>
+  </section>
+
+  <footer>
+    <span>Made by <a href="https://thethirdsourcers.com">Third Sourcers</a> · <a href="mailto:visioncli@thethirdsourcers.com">visioncli@thethirdsourcers.com</a> · MIT license · <a href="privacy.html">Privacy</a> · <a href="#code-signing">Code signing</a></span>
+    <button class="theme" id="theme" type="button">Theme</button>
+  </footer>
+</div>
+
+<script>
+// The primary button downloads for the visitor's system.
+(() => {
+  const ua = navigator.userAgent, a = document.getElementById("primary");
+  const arm = /arm|aarch64/i.test(navigator.userAgentData?.platform ?? "") || /aarch64|arm64/i.test(ua);
+  if (/Mac/i.test(ua) && !/iPhone|iPad/.test(ua)) { a.href = "https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.0/VisionCLI-0.11.0-macos.dmg"; a.textContent = "Download for macOS"; }
+  else if (/Windows/i.test(ua)) { a.href = `https://github.com/thethirdsourcers/visioncli/releases/download/v0.11.1/VisionCLI-0.11.1-windows-${arm ? "arm64" : "x64"}.exe`; a.textContent = "Download for Windows"; }
+  else if (/Linux/i.test(ua) && !/Android/i.test(ua)) { a.href = "#linux"; a.textContent = "Download for Linux"; }
+})();
+
+// Light / dark toggle, remembered on this browser.
+(() => {
+  const root = document.documentElement, key = "vcli-theme";
+  try { const t = localStorage.getItem(key); if (t) root.dataset.theme = t; } catch {}
+  document.getElementById("theme").addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem(key, root.dataset.theme); } catch {}
+  });
+})();
+
+// The sphere: a few thousand points on a slowly turning, breathing ball, coloured by depth.
+(() => {
+  const canvas = document.getElementById("sphere"), ctx = canvas.getContext("2d");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const N = 3800, pts = [];
+  for (let i = 0; i < N; i++) { // Fibonacci sphere: even spacing
+    const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), t = i * 2.399963;
+    // A little jitter so it reads as a cloud of points, not a grid.
+    const j = () => (Math.random() - 0.5) * 0.045;
+    pts.push([Math.cos(t) * r + j(), y + j(), Math.sin(t) * r + j(), Math.random() * 6.283]);
+  }
+  let w = 0, h = 0, dpr = 1;
+  const size = () => { dpr = Math.min(2, devicePixelRatio || 1); w = canvas.clientWidth; h = canvas.clientHeight; canvas.width = w * dpr; canvas.height = h * dpr; };
+  addEventListener("resize", size); size();
+  const dark = () => getComputedStyle(document.documentElement).colorScheme === "dark";
+  const frame = (ms) => {
+    const t = ms / 1000, R = Math.min(w, h) * 0.38, cx = w / 2, cy = h / 2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const ay = t * 0.18, ax = 0.35 + Math.sin(t * 0.1) * 0.15;
+    const sy = Math.sin(ay), cyy = Math.cos(ay), sx = Math.sin(ax), cxx = Math.cos(ax);
+    const d = dark();
+    for (const [x0, y0, z0, ph] of pts) {
+      // Breathing, uneven surface: the edge ripples like the reference sphere.
+      const n = 1 + 0.09 * Math.sin(x0 * 5 + t * 0.9 + ph * 0.15) * Math.cos(y0 * 4 - t * 0.7) + 0.05 * Math.sin(z0 * 9 + t * 1.3) + 0.03 * Math.sin(ph + t * 2);
+      let x = x0 * n, y = y0 * n, z = z0 * n;
+      [x, z] = [x * cyy - z * sy, x * sy + z * cyy];
+      [y, z] = [y * cxx - z * sx, y * sx + z * cxx];
+      const depth = (z + 1.1) / 2.2; // 0 back … 1 front
+      const px = cx + x * R, py = cy + y * R, s = 0.9 + depth * 1.9;
+      const hue = 228 + (1 - depth) * 18 + Math.sin(ph) * 6;
+      ctx.fillStyle = d ? `hsla(${hue}, 95%, ${64 + depth * 16}%, ${0.3 + depth * 0.7})` : `hsla(${hue}, 72%, ${48 + (1 - depth) * 24}%, ${0.3 + depth * 0.7})`;
+      ctx.beginPath(); ctx.arc(px, py, s / 2, 0, 6.283); ctx.fill();
+    }
+    if (!still) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

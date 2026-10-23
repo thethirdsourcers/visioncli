@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · VisionCLI</title>
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --page: #f3f3f7; --ink: #2b3a80; --text: #3d4566; --muted: #7b819a; --line: #dcdfea; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root { --page: #0d1024; --ink: #c9d6ff; --text: #b4bbd6; --muted: #7d84a3; --line: #1d2244; color-scheme: dark; } }
+  body { margin: 0; background: var(--page); color: var(--text); font: 300 17px/1.65 Outfit, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 22px 72px; }
+  a { color: var(--ink); }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 300 22px Outfit; color: var(--ink); }
+  .brand b { font-weight: 600; }
+  h1 { font: 200 44px/1.1 Outfit; color: var(--ink); margin: 40px 0 6px; letter-spacing: -1px; }
+  h1 b { font-weight: 600; }
+  h2 { font: 600 19px Outfit; color: var(--ink); margin: 34px 0 6px; }
+  .muted { color: var(--muted); }
+  li { margin: 6px 0; }
+  footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="./"><img src="mark.svg" width="30" height="30" alt=""><span>Vision<b>CLI</b></span></a>
+  <h1>Privacy <b>policy</b></h1>
+  <p class="muted">Last updated 14 October 2026 · Third Sourcers</p>
+
+  <p>VisionCLI is an app that runs on your computer. Third Sourcers doesn't run a VisionCLI server, doesn't create accounts and doesn't collect analytics or telemetry. This page explains what VisionCLI sends anywhere, and to whom.</p>
+
+  <h2>What stays on your computer</h2>
+  <ul>
+    <li>Your settings, question history and the screenshots kept with it, in VisionCLI's folder (macOS: <code>~/Library/Application Support/visioncli</code>; Linux: <code>~/.config/visioncli</code>; Windows: <code>%APPDATA%\visioncli</code>). History keeps the last 200 questions per project and screenshots for 30 days; you can clear it from the History window.</li>
+    <li>Speech recognition with Parakeet or Whisper, and Kokoro voices, run locally. Your audio isn't sent anywhere.</li>
+    <li>Meeting Notes (off until you turn it on, and off again whenever VisionCLI restarts) records the sound your computer plays and your microphone, and transcribes them locally. The recording, transcript and notes are saved in VisionCLI's <code>meetings</code> folder on your computer; delete them whenever you like. The audio is never uploaded. The transcript text goes to Claude (under your own account) to write summaries and suggested replies, and code questions are looked up in your project with read-only tools.</li>
+  </ul>
+
+  <h2>What is sent, and to whom</h2>
+  <ul>
+    <li><b>Your AI assistant.</b> Your questions, and the screenshots and screen text you choose to include, go to the assistant you use through its own command-line tool: Claude Code (Anthropic) or Antigravity/Gemini (Google). That happens under your account with them and their privacy terms; VisionCLI doesn't see or store your credentials.</li>
+    <li><b>Instant commands (optional).</b> If you add a TypeSafe API key, short commands like "open the Stripe tab" and browser tasks send the command and the relevant browser tab and page element text to TypeSafe (api.typesafe.ai) to decide what to do. Without a key, nothing is sent there.</li>
+    <li><b>macOS system speech (optional).</b> If you pick Apple's speech recognition instead of Parakeet or Whisper, macOS may use Apple's servers when on-device recognition isn't available.</li>
+    <li><b>Updates and downloads.</b> VisionCLI checks GitHub for new releases, and downloads speech models and tools you ask for from GitHub and Hugging Face. Those requests contain no personal data beyond what any download does (your IP address).</li>
+  </ul>
+
+  <h2>Computer control</h2>
+  <p>When the assistant clicks or types for you, those actions happen locally and you approve them (unless you allow all). Password fields and system settings always ask, and Esc stops it.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or requests: <a href="mailto:visioncli@thethirdsourcers.com">visioncli@thethirdsourcers.com</a>. The source code is public at <a href="https://github.com/thethirdsourcers/visioncli">github.com/thethirdsourcers/visioncli</a>.</p>
+
+  <footer><a href="./">VisionCLI</a> · Made by <a href="https://thethirdsourcers.com">Third Sourcers</a> · MIT license</footer>
+</main>
+</body>
+</html>
