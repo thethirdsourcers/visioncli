@@ -69,6 +69,22 @@ let bubbleFill = Color(red: 0.09, green: 0.09, blue: 0.11).opacity(0.95)
 let bubbleStroke = Color.white.opacity(0.12)
 let accent = AngularGradient(colors: [.cyan, .blue, .purple, .pink, .cyan], center: .center)
 
+/// The VisionCLI mark (docs/brand/mark.svg, as MenuIcon draws it): six aperture segments around a pupil.
+struct LogoMark: View {
+    var size: CGFloat
+    var body: some View {
+        let r = size * 6.1 / 18, seg = 2 * .pi * r / 6
+        ZStack {
+            Circle()
+                .stroke(style: StrokeStyle(lineWidth: size * 2.3 / 18, lineCap: .round, dash: [seg * 0.42, seg * 0.58]))
+                .frame(width: r * 2, height: r * 2)
+                .rotationEffect(.degrees(-70))
+            Circle().frame(width: size * 4.6 / 18, height: size * 4.6 / 18)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 struct Spinner: View {
     var size: CGFloat = 22
     @State private var visible = false
@@ -77,9 +93,7 @@ struct Spinner: View {
             Circle().stroke(Color.white.opacity(0.1), lineWidth: 2.5)
             // Only spins while its window is on screen (a hidden panel would keep animating).
             if visible { SpinnerArc() } else { SpinnerArc.arc }
-            Image(systemName: "eye.fill")
-                .font(.system(size: size * 0.36, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
+            LogoMark(size: size * 0.5).foregroundStyle(.white.opacity(0.85))
         }
         .frame(width: size, height: size)
         .trackingWindowVisibility($visible)
@@ -192,9 +206,11 @@ struct AnswerBubble: View {
     var header: some View {
         HStack(spacing: 7) {
             if s.phase == .answering { Spinner(size: 13) } else {
-                Image(systemName: s.phase == .error ? "exclamationmark.triangle.fill" : "eye.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(s.phase == .error ? .orange : .cyan)
+                if s.phase == .error {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(.orange)
+                } else {
+                    LogoMark(size: 12).foregroundStyle(.cyan)
+                }
             }
             Text(s.question)
                 .font(.system(size: 11, weight: .medium))
