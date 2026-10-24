@@ -13,6 +13,7 @@ final class ClaudeBackup: ObservableObject {
 
     @Published private(set) var running = false
     @Published private(set) var status = ""
+    @Published private(set) var fraction: Double?   // progress of the backup or restore running now
 
     private let queue = DispatchQueue(label: "dev.visioncli.claude-backup", qos: .utility)
     private var timer: Timer?
@@ -95,6 +96,56 @@ final class ClaudeBackup: ObservableObject {
         return shell(restic, args, env: env)
     }
 
+    /// Like `run`, but reads restic's --json output as it comes and reports its progress (on the main thread):
+    /// "status" lines carry percent_done, bytes_done and total_bytes.
+    private static func runWithProgress(_ repo: URL, _ args: [String], password: String, progress: @escaping (Double, Int64, Int64) -> Void) -> (Int32, String, String) {
+        guard let restic else { return (-1, "", "restic isn't installed (brew install restic)") }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: restic)
+        p.arguments = args
+        p.environment = ["HOME": home.path, "PATH": "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin",
+                         "RESTIC_REPOSITORY": repo.path, "RESTIC_PASSWORD": password]
+        let out = Pipe(), err = Pipe()
+        p.standardOutput = out
+        p.standardError = err
+        p.standardInput = FileHandle.nullDevice
+        var stdout = Data(), stderr = Data(), pending = Data()
+        let lock = NSLock()
+        var lastReport = Date.distantPast
+        out.fileHandleForReading.readabilityHandler = { h in
+            let chunk = h.availableData
+            guard !chunk.isEmpty else { return }
+            lock.lock(); stdout.append(chunk); pending.append(chunk); lock.unlock()
+            while let nl = pending.firstIndex(of: 10) {
+                let line = pending[pending.startIndex..<nl]
+                pending.removeSubrange(pending.startIndex...nl)
+                guard Date().timeIntervalSince(lastReport) > 0.25,
+                      let o = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                      o["message_type"] as? String == "status", let pct = o["percent_done"] as? Double else { continue }
+                lastReport = Date()
+                let done = (o["bytes_done"] as? NSNumber)?.int64Value ?? 0, total = (o["total_bytes"] as? NSNumber)?.int64Value ?? 0
+                DispatchQueue.main.async { progress(pct, done, total) }
+            }
+        }
+        err.fileHandleForReading.readabilityHandler = { h in
+            let chunk = h.availableData
+            lock.lock(); stderr.append(chunk); lock.unlock()
+        }
+        do { try p.run() } catch { return (-1, "", error.localizedDescription) }
+        p.waitUntilExit()
+        out.fileHandleForReading.readabilityHandler = nil
+        err.fileHandleForReading.readabilityHandler = nil
+        stdout.append(out.fileHandleForReading.readDataToEndOfFile())
+        stderr.append(err.fileHandleForReading.readDataToEndOfFile())
+        lock.lock(); defer { lock.unlock() }
+        return (p.terminationStatus, String(decoding: stdout, as: UTF8.self), String(decoding: stderr, as: UTF8.self))
+    }
+
+    private static func progressText(_ verb: String, _ pct: Double, _ done: Int64, _ total: Int64) -> String {
+        let f = { (n: Int64) in ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
+        return "\(verb)… \(Int(pct * 100))%" + (total > 0 ? " (\(f(done)) of \(f(total)))" : "")
+    }
+
     private static func failure(_ r: (Int32, String, String)) -> String {
         let e = r.2.trimmingCharacters(in: .whitespacesAndNewlines)
         return e.isEmpty ? "restic failed (\(r.0))" : String(e.split(separator: "\n").last ?? Substring(e))
@@ -139,6 +190,7 @@ final class ClaudeBackup: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.running = false
+                self.fraction = nil
                 if let error { self.status = "Couldn't set up backups: \(error)"; return }
                 Self.password = password
                 self.folder = url.path
@@ -170,7 +222,12 @@ final class ClaudeBackup: ObservableObject {
             var paths = [home.appendingPathComponent(".claude").path]
             let json = home.appendingPathComponent(".claude.json").path
             if FileManager.default.fileExists(atPath: json) { paths.append(json) }
-            let r = Self.run(repo, ["backup", "--json", "--tag", "visioncli", "--exclude", home.appendingPathComponent(".claude/.credentials.json").path] + paths, password: password)
+            let r = Self.runWithProgress(repo, ["backup", "--json", "--tag", "visioncli", "--exclude", home.appendingPathComponent(".claude/.credentials.json").path] + paths, password: password) { [weak self] pct, done, total in
+                guard let self, self.running else { return }
+                self.fraction = pct
+                self.status = Self.progressText("Backing up", pct, done, total)
+            }
+            if r.0 == 0 || r.0 == 3 { DispatchQueue.main.async { [weak self] in self?.status = "Cleaning up old snapshots…" } }
             // 3 = some files couldn't be read (a conversation being written): the snapshot is still made.
             let ok = r.0 == 0 || r.0 == 3
             var added = ""
@@ -183,6 +240,7 @@ final class ClaudeBackup: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.running = false
+                self.fraction = nil
                 if ok {
                     self.lastBackup = Date()
                     log("claude backup: done\(added.isEmpty ? "" : ", \(added) added")")
@@ -200,7 +258,9 @@ final class ClaudeBackup: ObservableObject {
         guard let last = lastBackup else { status = "No backup yet."; return }
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
-        status = "Last backup \(f.localizedString(for: last, relativeTo: Date()))\(added.isEmpty ? "" : " (\(added) new)"). Keeps 7 daily and 4 weekly snapshots."
+        let when = Date().timeIntervalSince(last) < 60 ? "just now" : f.localizedString(for: last, relativeTo: Date())
+        let new = added.isEmpty ? "" : added == "Zero KB" ? ", nothing new" : ", \(added) new"
+        status = "Last backup \(when)\(new). Keeps 7 daily and 4 weekly snapshots."
     }
 
     func showBackups() {
@@ -248,6 +308,7 @@ final class ClaudeBackup: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.running = false
+                self.fraction = nil
                 if let error {
                     log("claude restore failed: \(error)")
                     self.status = "Restore failed: \(error)"
@@ -274,7 +335,10 @@ final class ClaudeBackup: ObservableObject {
             }
         } catch { return error.localizedDescription }
         // Snapshots hold absolute paths, so restoring onto / puts each file back where it was.
-        let r = run(repo, ["restore", id, "--target", "/"], password: password)
+        let r = runWithProgress(repo, ["restore", id, "--target", "/", "--json"], password: password) { pct, done, total in
+            ClaudeBackup.shared.fraction = pct
+            ClaudeBackup.shared.status = progressText("Restoring", pct, done, total)
+        }
         if r.0 != 0 {
             // Put the previous files back rather than leave a half-restored folder.
             for name in names {
@@ -303,6 +367,7 @@ struct ClaudeBackupCard: View {
                         if !b.status.isEmpty {
                             Text(b.status).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         }
+                        if let f = b.fraction { ProgressView(value: f).frame(maxWidth: 260).padding(.top, 2) }
                     }
                     Spacer(minLength: 0)
                     if b.running { ProgressView().controlSize(.small) }
@@ -310,19 +375,31 @@ struct ClaudeBackupCard: View {
                 }
                 if b.folder != nil {
                     Divider()
-                    HStack(spacing: 8) {
-                        Button("Back Up Now") { b.backUp() }.disabled(b.running)
-                        Button("Show Backups") { b.showBackups() }
-                        Button("Restore…") { b.restore() }.disabled(b.running)
-                        Button("Copy Password") { b.copyPassword() }
-                        Spacer()
-                        Button("Turn Off") { b.folder = nil }.disabled(b.running)
+                    // One row when there's room, else two (Settings is narrow), never squashed labels.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { mainButtons; Spacer(minLength: 8); otherButtons }
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) { mainButtons }
+                            HStack(spacing: 8) { otherButtons }
+                        }
                     }
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
+            .animation(nil, value: b.status)
             .background(RoundedRectangle(cornerRadius: 9).fill(Color.primary.opacity(0.035)))
             .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.09), lineWidth: 1))
         }
+    }
+
+    @ViewBuilder private var mainButtons: some View {
+        Button("Back Up Now") { b.backUp() }.disabled(b.running).fixedSize()
+        Button("Restore…") { b.restore() }.disabled(b.running).fixedSize()
+        Button("Show Backups") { b.showBackups() }.fixedSize()
+    }
+
+    @ViewBuilder private var otherButtons: some View {
+        Button("Copy Password") { b.copyPassword() }.fixedSize()
+        Button("Turn Off") { b.folder = nil }.disabled(b.running).fixedSize()
     }
 }
