@@ -138,6 +138,15 @@ export interface SettingsSnapshot {
   desktopProblem: string | null;       // Desktop.problem()
   crashLogExists: boolean;
   homeProject: string;
+  /** Settings → General → Shortcuts (ShortcutsCard.swift); the texts that name keys use these too. */
+  shortcuts: {
+    hold: "alt" | "ctrl" | "super";
+    holdName: string;                  // "Alt", "Ctrl", "Super" ("Win" on Windows)
+    screenKeys: string;                // held for a screenshot: "Alt+Super"
+    added: string;                     // the key added for a screenshot: "Super", or "Alt" for Super holders
+    list: { id: string; title: string; keys: string; custom: boolean }[];  // point, pin, open, allow, fix, meeting
+    note: string;                      // why the last key press wasn't taken ("Alt+P is already used for …")
+  };
   /** Claude backup (ClaudeBackup.swift). */
   backup: {
     restic: boolean;                   // restic is on PATH
@@ -162,6 +171,9 @@ export interface SettingsActions {
   setAutoUpdate: boolean;
   checkForUpdates: undefined;
   installUpdate: undefined;
+  setHoldKey: "alt" | "ctrl" | "super";
+  recordShortcut: { id: string; code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }; // KeyboardEvent.code
+  resetShortcut: string;               // back to the default
   // Assistant
   setAssistant: AssistantId;
   setTerminalMode: boolean;

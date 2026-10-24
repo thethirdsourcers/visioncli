@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import type { DesktopWindow } from "../contracts";
 import { HomeProject } from "../features/home";
 import { MEETINGS_DIR, pastMeetings } from "../features/meeting/recording";
+import { DEFAULT_SHORTCUTS, shortcutLabel } from "../input/shortcuts";
 import { log } from "../log";
 import { settings } from "../settings";
 import { type LauncherModel, type MeetingAction, fileUrl } from "../ui/meeting";
@@ -27,7 +28,7 @@ declare module "./core" {
   }
 }
 
-App.prototype.meetingShortcut = process.platform === "win32" ? "Shift+Alt+Win+R" : "Shift+Alt+Super+R";
+App.prototype.meetingShortcut = shortcutLabel(DEFAULT_SHORTCUTS.meeting); // or the user's / the fallback (applyShortcuts)
 
 /** The engine label the panel shows ("Parakeet", "Whisper large-v3"). */
 export function engineLabel(name: string | undefined | null): string {

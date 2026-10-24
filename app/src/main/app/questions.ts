@@ -5,6 +5,7 @@ import { QuickCommandFilter, SlashCommand } from "../core/routing";
 import { geminiAttachable } from "../assistant";
 import { HomeProject } from "../features/home";
 import { isTerminal } from "../features/projects";
+import { holdNames } from "../input/shortcuts";
 import { log } from "../log";
 import { settings } from "../settings";
 import { assistantName, cliFor } from "../terminal/transcripts";
@@ -45,7 +46,7 @@ App.prototype.questionReady = async function (this: App, text: string) {
     if (available && !available.parakeet && !available.whisper.length) {
       this.flash("Speech recognition isn't installed yet. Install it in VisionCLI menu → Settings… → Voice → Speech recognition.", 12);
     } else {
-      this.flash("Didn't catch that. Hold Alt while you speak.");
+      this.flash(`Didn't catch that. Hold ${holdNames(settings.get("holdKey")).name} while you speak.`);
     }
     return;
   }

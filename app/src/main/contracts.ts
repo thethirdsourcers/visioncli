@@ -227,6 +227,7 @@ export interface OverlayState {
   toast?: string;
   project?: string;
   assistantName: string;         // "Claude" | "Gemini"
+  keys: { pin: string; open: string; allow: string };  // Settings → Shortcuts' keys, for the bubble's hints
 }
 
 /** Things the bubble's buttons and links ask for (renderer → main). */

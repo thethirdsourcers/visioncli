@@ -19,7 +19,7 @@ const shot = (name: string) => {
 };
 const move = (x: number, y: number) => sh("xdotool", "mousemove", String(x), String(y));
 
-const base: OverlayState = { phase: "idle", question: "", live: "", level: 0, status: "", raw: "", pinned: false, speaking: false, screenshot: false, assistantName: "Claude" };
+const base: OverlayState = { phase: "idle", question: "", live: "", level: 0, status: "", raw: "", pinned: false, speaking: false, screenshot: false, assistantName: "Claude", keys: { pin: "Alt+P", open: "Alt+O", allow: "Alt+Enter" } };
 
 const ANSWER = `## Why the port is wrong
 The server reads **PORT** before \`.env\` is loaded, so it falls back to \`3000\`. See \`src/server.ts:42\` and config.ts:7.

@@ -32,7 +32,7 @@ App.prototype.offerFix = function (this: App, e: TerminalError) {
   log(`error watcher: ${e.tab}: ${e.text.split("\n").pop() ?? ""}`);
   this.offeredError = e;
   const where = e.folder ? basename(e.folder) : e.tab || "the terminal";
-  this.ui.badge(`Error in ${where} · Alt+E to fix`, { icon: "warning", tint: "var(--orange)", seconds: 20 });
+  this.ui.badge(`Error in ${where} · ${this.shortcutLabels().fix} to fix`, { icon: "warning", tint: "var(--orange)", seconds: 20 });
   this.setOverlayKeys(this.overlayKeys);
   if (this.errorOfferTimer) clearTimeout(this.errorOfferTimer);
   this.errorOfferTimer = setTimeout(() => {

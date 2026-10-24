@@ -1,5 +1,6 @@
 import type { PermissionAnswer } from "../contracts";
 import { createControlServer, type ApprovalCard } from "../control";
+import { holdNames } from "../input/shortcuts";
 import { log } from "../log";
 import { settings } from "../settings";
 import { App } from "./core";
@@ -71,7 +72,7 @@ App.prototype.startCrashWatcher = function (this: App) {
   this.crashWatcher.onCrash = (crash) => {
     if (this.state.phase !== "idle") return;
     this.state.question = `${crash.app} crashed`;
-    this.flash(`${crash.app} just crashed. Hold Alt and ask "why did it crash?".`, 9);
+    this.flash(`${crash.app} just crashed. Hold ${holdNames(settings.get("holdKey")).name} and ask "why did it crash?".`, 9);
   };
   if (settings.get("watchCrashes")) void this.crashWatcher.start();
 };

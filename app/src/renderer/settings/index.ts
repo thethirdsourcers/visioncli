@@ -41,6 +41,7 @@ function show(next: SettingsSnapshot, force = false) {
 function choose(id: SettingsSection) {
   if (id === section) return;
   section = id;
+  recording = null;
   void window.vcli.invoke("settings:section", id);
   render(true);
   void refreshUsage();
@@ -80,11 +81,12 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
     card(null, null, [
       switchRow("Start at login", "Opens VisionCLI when you log in.", s.startAtLogin, (on) => act("setStartAtLogin", on)),
       switchRow("Screenshot every question",
-        `Sends a screenshot of the window with every voice question (uses more tokens). Off: only when you hold Alt+${navigator.userAgent.includes("Windows") ? "Win" : "Super"} or drag a box; the assistant can still take a look itself.`,
+        `Sends a screenshot of the window with every voice question (uses more tokens). Off: only when you hold ${s.shortcuts.screenKeys} or drag a box; the assistant can still take a look itself.`,
         s.screenshotEvery, (on) => act("setScreenshotEvery", on)),
-      switchRow("Spot errors in the terminal", "When an error shows up in a terminal pane (tmux, kitty or WezTerm), offers Alt+E to have the assistant explain and fix it.",
+      switchRow("Spot errors in the terminal", `When an error shows up in a terminal pane (tmux, kitty or WezTerm), offers ${keysOf(s, "fix")} to have the assistant explain and fix it.`,
         s.errorWatcher, (on) => act("setErrorWatcher", on)),
     ]),
+    shortcutsCard(s),
     card("Updates", null, [
       row(`VisionCLI ${s.version}`, s.updateStatus ?? (s.updateAvailable ? `Version ${s.updateAvailable} is available.` : "Checks GitHub for new releases."),
         s.updateStatus ? spinner()
@@ -190,7 +192,7 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
     const windows = s.platform === "win32";
     // Windows needs no setup for any of these: keyboard hooks, UI Automation and SendInput are always available.
     const access = windows ? [
-      row("Keyboard access", s.keyboardAccess ? "Notices when you hold Alt (and Win for a screenshot)." : s.keyboardProblem ?? "VisionCLI's helper isn't running.",
+      row("Keyboard access", s.keyboardAccess ? `Notices when you hold ${s.shortcuts.holdName} (and ${s.shortcuts.added} for a screenshot).` : s.keyboardProblem ?? "VisionCLI's helper isn't running.",
         s.keyboardAccess ? allowed() : button("Try Again", () => act("grantKeyboardAccess"))),
       row("UI Automation", "Lets the assistant find buttons and fields in apps.", s.atspi ? allowed("On") : allowed("Built in")),
       row("Clicking and typing", "Through Windows input (SendInput).", allowed()),
@@ -201,8 +203,8 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
       card(null, null, access ?? [
         row("Keyboard access (input group)",
           s.keyboardAccess
-            ? (s.keyboardBackend === "xinput2" ? "Using the X11 fallback (XInput2). Join the input group to make it work on Wayland too." : "Notices when you hold Alt, on X11 and Wayland.")
-            : s.keyboardProblem ?? "Needed to notice when you hold Alt. Join the input group once, then log out and back in.",
+            ? (s.keyboardBackend === "xinput2" ? "Using the X11 fallback (XInput2). Join the input group to make it work on Wayland too." : `Notices when you hold ${s.shortcuts.holdName}, on X11 and Wayland.`)
+            : s.keyboardProblem ?? `Needed to notice when you hold ${s.shortcuts.holdName}. Join the input group once, then log out and back in.`,
           s.keyboardAccess && s.keyboardBackend !== "xinput2" ? allowed() : s.keyboardAccess ? [allowed("X11 only"), button("Join Input Group…", () => act("grantKeyboardAccess"))]
             : button("Join Input Group…", () => act("grantKeyboardAccess"))),
         row("Accessibility (AT-SPI)", "Lets the assistant find buttons and fields in apps.",
@@ -325,6 +327,36 @@ function modelRow(s: SettingsSnapshot): HTMLElement {
   if (!s.claudeModels.some((m) => m.id === s.claudeModel)) opts.push({ value: s.claudeModel, label: s.claudeModel });
   return row("Model", "A running terminal Claude switches too.", select(s.claudeModel, opts, (v) => act("setClaudeModel", v)));
 }
+
+const keysOf = (s: SettingsSnapshot, id: string) => s.shortcuts.list.find((x) => x.id === id)?.keys ?? "";
+
+/** The shortcut being recorded (its button says "Press keys…"); the next key press with a modifier replaces it. */
+let recording: string | null = null;
+
+/** Settings → General → Shortcuts (ShortcutsCard): the hold-to-talk key, and each key combination re-recorded or reset. */
+function shortcutsCard(s: SettingsSnapshot): HTMLElement {
+  const k = s.shortcuts;
+  const sup = s.platform === "win32" ? "Win" : "Super";
+  const holdKeys: Option[] = [{ value: "alt", label: "Alt" }, { value: "ctrl", label: "Ctrl" }, { value: "super", label: sup }];
+  return card("Shortcuts", !recording && k.note ? k.note : `Click a shortcut, then press the new keys (with Ctrl, Alt or ${sup}). Esc cancels.`, [
+    row("Hold to talk", `Hold it, ask, let go. Add ${k.added} for a screenshot (${k.screenKeys}).`, select(k.hold, holdKeys, (v) => act("setHoldKey", v as SettingsActions["setHoldKey"]))),
+    ...k.list.map((x) => row(x.title, null, [
+      button(recording === x.id ? "Press keys…" : x.keys, () => { recording = x.id; render(); }),
+      h("button.icon-button", { title: "Back to the default", disabled: !x.custom, onclick: () => { recording = null; void act("resetShortcut", x.id); } }, icon("undo", 15)),
+    ])),
+  ]);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (["Control", "Alt", "Shift", "Meta", "OS", "AltGraph"].includes(e.key)) return; // wait for the key itself
+  const id = recording;
+  recording = null;
+  render();
+  if (e.key !== "Escape") void act("recordShortcut", { id, code: e.code, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey });
+}, true);
 
 let backupPassword = "";
 

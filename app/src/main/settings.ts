@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { HoldKey } from "./input/shortcuts";
 import { SUP } from "./paths";
 
 // The macOS app's UserDefaults keys and defaults, stored in SUP/settings.json.
@@ -45,6 +46,9 @@ export interface SettingsShape {
   /** Content protection on every VisionCLI window (Windows; not possible on Linux). */
   hideFromCapture: boolean;
   settingsSection: string | null;
+  /** Settings → Shortcuts: the hold-to-talk key, and key combinations changed from their defaults (id → "Alt+P"). */
+  holdKey: HoldKey;
+  shortcuts: Partial<Record<string, string>>;
   notifiedUpdate: string | null;
   permissionRepairVersion: string | null;
   /** Session ids and caches: backgroundSession:<cwd>, terminalSession:<project>, agyModels, usage.* … */
@@ -57,7 +61,7 @@ export const DEFAULTS: SettingsShape = {
   agyModel: null, smartRouting: true, quickCommands: true, screenshotEveryQuestion: false, setupDone: false, setupStep: null,
   meetingSummarizeGuest: true, meetingSummarizeYou: false, meetingReplies: true, meetingCodeLookup: true, meetingRecord: true,
   usageInMenuBar: true, weeklyInMenuBar: false, pinnedProject: null, autoActivity: true,
-  inputDevice: null, outputDevice: null, ghostCursor: true, hideFromCapture: false, settingsSection: null, notifiedUpdate: null, permissionRepairVersion: null,
+  inputDevice: null, outputDevice: null, ghostCursor: true, hideFromCapture: false, settingsSection: null, holdKey: "alt", shortcuts: {}, notifiedUpdate: null, permissionRepairVersion: null,
   store: {},
 };
 

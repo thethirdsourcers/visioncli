@@ -4,6 +4,7 @@ import type { WinHelper } from "../desktop/windows/win32";
 import { log } from "../log";
 import { KEY } from "./evdev";
 import { type Clock, HoldMachine } from "./hold";
+import { vkToEvdev } from "./shortcuts";
 
 // Windows hold-to-talk: the helper's low-level keyboard and mouse hooks (WH_KEYBOARD_LL / WH_MOUSE_LL) stream key,
 // button and motion events, which go into the same HoldMachine as the Linux backends (as evdev codes). Hooks observe
@@ -27,7 +28,7 @@ export const MASK_KEY = "vk:0xE8";
 /** Keys with no evdev twin in hold.ts still count as "another key" (cancels a hold): an offset keeps them apart. */
 const OTHER = 0x1000;
 
-/** A VK code → the evdev code HoldMachine expects (Alt, Super, Shift, Ctrl, Space, Esc, P, O, E, Enter; others offset). */
+/** A VK code → the evdev code HoldMachine expects (modifiers, Esc, and the keys a shortcut can use; others offset). */
 export function vkToCode(vk: number): number {
   switch (vk) {
     case VK.MENU: case VK.LMENU: return KEY.LEFTALT;
@@ -44,7 +45,7 @@ export function vkToCode(vk: number): number {
     case VK.O: return KEY.O;
     case VK.E: return KEY.E;
     case VK.RETURN: return KEY.ENTER;
-    default: return OTHER + vk;
+    default: return vkToEvdev(vk) ?? OTHER + vk; // the other keys a custom shortcut can use
   }
 }
 

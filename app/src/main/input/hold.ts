@@ -1,5 +1,6 @@
 import type { HotkeyEvent } from "../contracts";
 import { KEY } from "./evdev";
+import { type Combo, activeKeys } from "./shortcuts";
 
 // ModifierHold (Hotkeys.swift) + the key handling of App+Listening.swift, as a pure state machine fed with key and
 // button events from any backend (evdev, XInput2):
@@ -9,6 +10,8 @@ import { KEY } from "./evdev";
 // - Any other key (Alt+Tab, Alt+F4…) or a mouse button: before the 0.3 s it just wasn't a hold; after it, holdCancel.
 // - Alt+Shift+Space → pointMode; letting go of Space or Alt ends it (tap/holdEnd). Clicks are the drag, not a cancel.
 // - Esc, Alt+P, Alt+O, Alt+Enter → overlayKey, only while overlay keys are on.
+// - The hold key (Alt by default), the screenshot modifier (Super, or Alt for Super holders) and the combinations
+//   (point, pin, open, allow, fix) are the user's choice (Settings → Shortcuts): read from activeKeys on every key.
 // - Linux addition: once Alt was part of something else (Alt+Tab, Alt+click, a hold that just ended), Alt alone
 //   doesn't start a new hold until it is let go. Alt+Tab is the window switcher here (⌘Tab on macOS), and letting go
 //   of Shift in Alt+Shift+Tab left "Alt alone" held long enough to start listening.
@@ -31,6 +34,12 @@ const CTRL = new Set<number>([KEY.LEFTCTRL, KEY.RIGHTCTRL]);
 const isModifier = (c: number) => ALT.has(c) || SUPER.has(c) || SHIFT.has(c) || CTRL.has(c);
 
 type Hold = "talk" | "screen" | "point";
+type Mod = "alt" | "sup" | "ctrl";
+type Flags = { alt: boolean; sup: boolean; shift: boolean; ctrl: boolean };
+
+/** The key with exactly these modifiers (Enter on the keypad counts as Enter). */
+const matches = (c: Combo, code: number, f: Flags) =>
+  (code === c.code || (c.code === KEY.ENTER && code === KEY.KPENTER)) && f.alt === c.alt && f.ctrl === c.ctrl && f.shift === c.shift && f.sup === c.sup;
 
 export class HoldMachine {
   overlayKeys = false;
@@ -51,6 +60,12 @@ export class HoldMachine {
 
   private held(set: Set<number>) { for (const c of set) if (this.down.get(c)) return true; return false; }
   private flags() { return { alt: this.held(ALT), sup: this.held(SUPER), shift: this.held(SHIFT), ctrl: this.held(CTRL) }; }
+  /** The hold key, the one added for a screenshot, and the remaining one (which makes it not a hold). */
+  private roles(): { hold: Mod; screen: Mod; other: Mod } {
+    const h = activeKeys.current.hold;
+    return h === "ctrl" ? { hold: "ctrl", screen: "sup", other: "alt" } : h === "super" ? { hold: "sup", screen: "alt", other: "ctrl" } : { hold: "alt", screen: "sup", other: "ctrl" };
+  }
+  private holdDown() { return this.flags()[this.roles().hold]; }
   private get immediate() { return this.listening ?? this.tapMode; }
 
   /** A key went down (`down`) or up. Repeats (value 2) must not be passed in. */
@@ -78,14 +93,14 @@ export class HoldMachine {
   stop() { this.cancelPending(); if (this.tapTimer) this.clock.clearTimeout(this.tapTimer); }
 
   private flagsChanged() {
-    const f = this.flags();
+    const f = this.flags(), r = this.roles();
     if (this.active === "point") return;
     if (this.active) {
-      if (this.active === "talk" && f.alt && f.sup) { this.active = "screen"; this.emit({ type: "screenshot" }); }
+      if (this.active === "talk" && f[r.hold] && f[r.screen]) { this.active = "screen"; this.emit({ type: "screenshot" }); }
       return;
     }
-    if (this.latched) { if (!f.alt) this.latched = false; this.cancelPending(); return; }
-    const key = f.alt && !f.shift && !f.ctrl ? (f.sup ? "screen" : "talk") : null;
+    if (this.latched) { if (!f[r.hold]) this.latched = false; this.cancelPending(); return; }
+    const key = f[r.hold] && !f.shift && !f[r.other] ? (f[r.screen] ? "screen" : "talk") : null;
     if (!key) { this.cancelPending(); return; }
     this.candidate = key;
     if (this.pending) this.clock.clearTimeout(this.pending);
@@ -106,15 +121,13 @@ export class HoldMachine {
   }
 
   private keyDown(code: number) {
-    const f = this.flags();
+    const f = this.flags(), k = activeKeys.current;
     if (this.overlayKeys) {
-      const altOnly = f.alt && !f.sup && !f.shift && !f.ctrl;
       const none = !f.alt && !f.sup && !f.shift && !f.ctrl;
-      const key = code === KEY.ESC && none ? "esc" : !altOnly ? null
-        : code === KEY.P ? "pin" : code === KEY.O ? "open" : code === KEY.E ? "fix" : code === KEY.ENTER || code === KEY.KPENTER ? "allow" : null;
+      const key = code === KEY.ESC && none ? "esc" : (["pin", "open", "fix", "allow"] as const).find((x) => matches(k[x], code, f)) ?? null;
       if (key) { this.cancelPending(true); this.emit({ type: "overlayKey", key }); return; }
     }
-    if (code === KEY.SPACE && f.alt && f.shift && !f.sup && !f.ctrl) {
+    if (matches(k.point, code, f)) {
       this.cancelPending();
       this.active = "point";
       this.activeAt = this.clock.now();
@@ -131,11 +144,13 @@ export class HoldMachine {
   private keyUp(code: number) {
     const f = this.flags();
     if (this.active === "point") {
-      if (code === KEY.SPACE || !f.alt) this.end();
+      // Letting go of the key or one of its modifiers (Shift aside) ends it, like ⌥⇧Space on macOS.
+      const p = activeKeys.current.point;
+      if (code === p.code || (p.alt && !f.alt) || (p.ctrl && !f.ctrl) || (p.sup && !f.sup)) this.end();
       return;
     }
     if (this.active) {
-      if (!f.alt) this.end();
+      if (!f[this.roles().hold]) this.end();
       return;
     }
     if (isModifier(code)) this.flagsChanged();
@@ -146,13 +161,13 @@ export class HoldMachine {
     const send = this.sendPress;
     this.active = null;
     this.sendPress = false;
-    this.latched = this.flags().alt; // let go of Space first in point mode: Alt alone is not a new hold
+    this.latched = this.holdDown(); // let go of Space first in point mode: Alt alone is not a new hold
     if (quick && !send) { this.setTapMode(true); this.emit({ type: "tap" }); }
     else this.emit({ type: "holdEnd" });
   }
 
   private holdCancel() {
-    this.latched = this.flags().alt;
+    this.latched = this.holdDown();
     this.active = null;
     this.sendPress = false;
     this.setTapMode(false);
@@ -164,7 +179,7 @@ export class HoldMachine {
     if (this.pending) this.clock.clearTimeout(this.pending);
     this.pending = null;
     this.candidate = null;
-    if (latch && this.flags().alt) this.latched = true;
+    if (latch && this.holdDown()) this.latched = true;
   }
 
   private setTapMode(on: boolean) {

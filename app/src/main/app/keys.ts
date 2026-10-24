@@ -6,7 +6,7 @@
 
 export type OverlayKey = "esc" | "pin" | "open" | "allow" | "fix";
 
-export const ACCELERATORS: Record<OverlayKey, string> = { esc: "Escape", pin: "Alt+P", open: "Alt+O", allow: "Alt+Return", fix: "Alt+E" };
+export const ACCELERATORS: Record<OverlayKey, string> = { esc: "Escape", pin: "Alt+P", open: "Alt+O", allow: "Alt+Enter", fix: "Alt+E" };
 
 export interface ShortcutApi {
   register(accelerator: string, cb: () => void): boolean;
@@ -15,6 +15,8 @@ export interface ShortcutApi {
 
 export class OverlayKeys {
   private on = new Set<OverlayKey>();
+  /** Settings → Shortcuts' choices (Esc stays). */
+  private accel: Record<OverlayKey, string> = { ...ACCELERATORS };
   private last = new Map<OverlayKey, number>();
   static readonly DEDUPE_MS = 400;
 
@@ -27,12 +29,20 @@ export class OverlayKeys {
       if (want === this.on.has(k)) continue;
       if (want) {
         this.on.add(k);
-        try { this.api?.register(ACCELERATORS[k], () => this.press(k)); } catch {}
+        try { this.api?.register(this.accel[k], () => this.press(k)); } catch {}
       } else {
         this.on.delete(k);
-        try { this.api?.unregister(ACCELERATORS[k]); } catch {}
+        try { this.api?.unregister(this.accel[k]); } catch {}
       }
     }
+  }
+
+  /** New key combinations take effect at once for the keys live now (HotKeys.reload). */
+  setAccelerators(a: Partial<Record<OverlayKey, string>>) {
+    const live = Object.fromEntries([...this.on].map((k) => [k, true]));
+    this.clear();
+    this.accel = { ...this.accel, ...a, esc: "Escape" };
+    this.set(live);
   }
 
   get active(): boolean { return this.on.size > 0; }

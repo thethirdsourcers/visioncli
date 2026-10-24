@@ -66,7 +66,7 @@ function buildAnswer() {
       <button class="icon-btn" data-act="speak" title="Read aloud"></button>
       <button class="icon-btn" data-act="history" title="History">${icons.history}</button>
       <span class="spacer"></span><span class="toast"></span>
-      <button class="icon-btn" data-act="openFirst" title="Open file (Alt+O)">${icons.open}</button>
+      <button class="icon-btn" data-act="openFirst">${icons.open}</button>
       <button class="icon-btn" data-act="pin"></button>
       <button class="icon-btn" data-act="close" title="Close (esc)">${icons.close}</button>
     </div></div>`;
@@ -123,9 +123,11 @@ function updateAnswer(st: OverlayState) {
   speak.classList.toggle("active", st.speaking);
   const pin = toolbar.querySelector<HTMLElement>('[data-act="pin"]')!;
   pin.innerHTML = st.pinned ? icons.pinSlash : icons.pin;
-  pin.title = st.pinned ? "Unpin (Alt+P)" : "Pin (Alt+P)";
+  pin.title = `${st.pinned ? "Unpin" : "Pin"} (${st.keys.pin})`;
   pin.classList.toggle("active", st.pinned);
-  toolbar.querySelector<HTMLElement>('[data-act="openFirst"]')!.hidden = !hasFileRef(answer);
+  const open = toolbar.querySelector<HTMLElement>('[data-act="openFirst"]')!;
+  open.hidden = !hasFileRef(answer);
+  open.title = `Open file (${st.keys.open})`;
   const toast = toolbar.querySelector<HTMLElement>(".toast")!;
   toast.textContent = st.toast ?? "";
   toast.hidden = !st.toast;
@@ -143,7 +145,7 @@ function renderApproval(st: OverlayState) {
     ${req.tool ? `<div class="tool">${esc(req.tool)}</div>` : ""}
     ${lines.length ? `<div class="diff">${lines.map((l) => `<div class="${l.kind}">${esc(prefix[l.kind] + l.text)}</div>`).join("")}</div>` : ""}
     <div class="buttons">
-      <button class="capsule-btn primary" data-approve="allow">Allow&nbsp;&nbsp;Alt+Enter</button>
+      <button class="capsule-btn primary" data-approve="allow">Allow&nbsp;&nbsp;${esc(st.keys.allow)}</button>
       <button class="capsule-btn outline" data-approve="allowAll">Allow all this session</button>
       <span class="spacer"></span>
       ${req.queue > 0 ? `<span class="queue">${req.queue} more waiting</span>` : ""}

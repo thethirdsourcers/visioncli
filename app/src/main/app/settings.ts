@@ -152,6 +152,7 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     desktopProblem: p.desktopProblem,
     crashLogExists: crashLog,
     homeProject: HomeProject.path,
+    shortcuts: this.shortcutsSnapshot(),
     backup: this.backupSnapshot(),
   };
 };
@@ -214,6 +215,7 @@ App.prototype.settingsAction = async function (this: App, name, value) {
     case "openLog": this.openWithDefault(LOG_FILE); break;
     case "openCrashLog": this.openWithDefault(this.crashLogFile); break;
     case "openHome": HomeProject.ensure(); this.openWithDefault(HomeProject.path); break;
+    case "setHoldKey": case "recordShortcut": case "resetShortcut": this.shortcutAction(name, value); break;
     default: if (name.startsWith("backup")) await this.backupAction(name, value);
   }
   await this.refreshProbe(true);

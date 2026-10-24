@@ -155,6 +155,7 @@ export class App {
     const raw: OverlayState = {
       phase: "idle", question: "", live: "", level: 0, status: "", raw: "", pinned: false, speaking: false, screenshot: false,
       toast: "", project: HomeProject.label(this._project), assistantName: "Claude",
+      keys: { pin: "Alt+P", open: "Alt+O", allow: "Alt+Enter" }, // applyShortcuts sets the chosen ones
     };
     // Like the SwiftUI view observing OverlayState: any change is drawn on the next tick, coalesced.
     this.state = new Proxy(raw, {

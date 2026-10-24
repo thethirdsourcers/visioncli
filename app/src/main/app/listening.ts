@@ -189,7 +189,7 @@ App.prototype.startListening = function (this: App, point: boolean, screen = fal
   })();
 
   if (point) {
-    this.state.status = "Drag around what you mean, or tap Alt+Shift+Space for the whole window…";
+    this.state.status = `Drag around what you mean, or tap ${this.shortcutLabels().point} for the whole window…`;
     void this.ui.selectRegion().then((rect) => {
       if (!rect || this.pressedAt !== started) return;
       this.region = rect;

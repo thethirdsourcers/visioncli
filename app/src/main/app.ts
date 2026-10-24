@@ -56,6 +56,7 @@ import "./app/control";
 import "./app/errors";
 import "./app/backup";
 import "./app/resources";
+import "./app/shortcuts";
 import "./app/debug";
 
 export { App } from "./app/core";
@@ -229,13 +230,7 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   });
   a.meeting.on("change", () => a.pushMeeting());
   void recoverRecordings();
-  const shortcuts = [a.meetingShortcut, "Control+Shift+Alt+R"];
-  for (const sc of shortcuts) {
-    let ok = false;
-    try { ok = globalShortcut.register(sc.replace("Win", "Super"), () => a.showMeetingLauncher()); } catch {}
-    if (ok) { a.meetingShortcut = sc.replace("Control", "Ctrl"); log(`meeting: shortcut ${a.meetingShortcut}`); break; }
-    log(`meeting: couldn't register ${sc}`);
-  }
+  a.applyShortcuts(); // the hold key, overlay keys and the Meeting Notes shortcut (Settings → Shortcuts)
 
   // ── Updates and model downloads ──
   a.updater = new Updater({ currentVersion: a.version, openUrl: (url) => void shell.openExternal(url), quit: () => a.quit() });

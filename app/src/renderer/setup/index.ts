@@ -105,22 +105,25 @@ const WINDOWS = navigator.userAgent.includes("Windows");
 const SUPER = WINDOWS ? "Win" : "Super";
 
 function page(): Child {
+  // The keys chosen in Settings → Shortcuts (Alt, Alt+Super and Alt+Shift+Space by default).
+  const hold = s?.shortcuts.holdName ?? "Alt";
+  const keys = (k: string) => k.split("+").join(" ");
   switch (step) {
     case "welcome":
       return [
         header("Welcome to VisionCLI", "Ask Claude about anything on your screen, out loud. This takes about a minute."),
         h("div.keys-list", null,
-          keyRow("Alt", "Hold Alt, ask, let go: the answer appears in the corner."),
-          keyRow(`Alt ${SUPER}`, `Hold Alt and ${SUPER} to include a screenshot of the window.`),
-          keyRow("Alt Shift Space", "Drag a box around what you mean.")),
+          keyRow(hold, `Hold ${hold}, ask, let go: the answer appears in the corner.`),
+          keyRow(keys(s?.shortcuts.screenKeys ?? `Alt+${SUPER}`), "Hold both to include a screenshot of the window."),
+          keyRow(keys(s?.shortcuts.list.find((x) => x.id === "point")?.keys ?? "Alt+Shift+Space"), "Drag a box around what you mean.")),
         h("div.mascot", null, h("img", { src: "../../assets/mascot/peek.png", alt: "", onerror: (e: Event) => (e.target as HTMLElement).remove() })),
       ];
     case "microphone":
-      return [header("Microphone", "VisionCLI listens only while you hold Alt."), permission("microphone", s && s.inputs.length > 0 && h("div.inline-row", null,
+      return [header("Microphone", `VisionCLI listens only while you hold ${hold}.`), permission("microphone", s && s.inputs.length > 0 && h("div.inline-row", null,
         h("span", null, "Microphone"),
         selectDevice()))];
     case "keyboard":
-      return [header("Keyboard Access", WINDOWS ? "Lets VisionCLI notice when you hold Alt, in every app." : "Lets VisionCLI notice when you hold Alt, on X11 and Wayland. Linux lets only members of the input group read the keyboard."), permission("keyboard")];
+      return [header("Keyboard Access", WINDOWS ? `Lets VisionCLI notice when you hold ${hold}, in every app.` : `Lets VisionCLI notice when you hold ${hold}, on X11 and Wayland. Linux lets only members of the input group read the keyboard.`), permission("keyboard")];
     case "screen":
       return [header("Screen Capture", "Lets VisionCLI see the window you're asking about. It only looks when you ask."), permission("screen")];
     case "control":
@@ -134,7 +137,7 @@ function page(): Child {
     case "done": {
       const left = missing(step, checks, s);
       return [
-        header("You're all set", "Hold Alt and ask \"what is this?\" while pointing at anything on your screen."),
+        header("You're all set", `Hold ${hold} and ask "what is this?" while pointing at anything on your screen.`),
         left.length > 0 && note(`Still to do: ${left.map((x) => x.title).join(", ")}. Reopen this from the VisionCLI menu → Settings… → General → Setup Wizard.`),
       ];
     }
