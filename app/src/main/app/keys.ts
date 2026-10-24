@@ -1,11 +1,12 @@
-// Esc, Alt+P, Alt+O and Alt+Enter while the overlay is up (HotKeys.set(.dismiss/.pin/.open/.allow) on macOS).
+// Esc, Alt+P, Alt+O and Alt+Enter while the overlay is up, and Alt+E while an error is offered (HotKeys.set(.dismiss/
+// .pin/.open/.allow/.fixError) on macOS).
 // The evdev / XInput2 listener only *sees* them; to take them away from the focused app like macOS does, they're
 // also registered with Electron's globalShortcut (an X grab), only while they mean something. A press can arrive
 // both ways, so each key fires once per press.
 
-export type OverlayKey = "esc" | "pin" | "open" | "allow";
+export type OverlayKey = "esc" | "pin" | "open" | "allow" | "fix";
 
-export const ACCELERATORS: Record<OverlayKey, string> = { esc: "Escape", pin: "Alt+P", open: "Alt+O", allow: "Alt+Return" };
+export const ACCELERATORS: Record<OverlayKey, string> = { esc: "Escape", pin: "Alt+P", open: "Alt+O", allow: "Alt+Return", fix: "Alt+E" };
 
 export interface ShortcutApi {
   register(accelerator: string, cb: () => void): boolean;

@@ -78,6 +78,7 @@ App.prototype.overlayKey = function (this: App, k: OverlayKey) {
     case "pin": this.togglePin(); break;
     case "open": void this.openFirstReference(); break;
     case "allow": this.approve("allow"); break;
+    case "fix": this.fixOfferedError(); break;
   }
 };
 

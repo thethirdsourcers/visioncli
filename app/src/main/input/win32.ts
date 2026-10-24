@@ -17,7 +17,7 @@ import { type Clock, HoldMachine } from "./hold";
 
 /** Windows virtual-key codes the hold machine cares about. */
 export const VK = {
-  RETURN: 0x0d, SHIFT: 0x10, CONTROL: 0x11, MENU: 0x12, ESCAPE: 0x1b, SPACE: 0x20, O: 0x4f, P: 0x50,
+  RETURN: 0x0d, SHIFT: 0x10, CONTROL: 0x11, MENU: 0x12, ESCAPE: 0x1b, SPACE: 0x20, E: 0x45, O: 0x4f, P: 0x50,
   LWIN: 0x5b, RWIN: 0x5c, LSHIFT: 0xa0, RSHIFT: 0xa1, LCONTROL: 0xa2, RCONTROL: 0xa3, LMENU: 0xa4, RMENU: 0xa5,
 } as const;
 
@@ -27,7 +27,7 @@ export const MASK_KEY = "vk:0xE8";
 /** Keys with no evdev twin in hold.ts still count as "another key" (cancels a hold): an offset keeps them apart. */
 const OTHER = 0x1000;
 
-/** A VK code → the evdev code HoldMachine expects (Alt, Super, Shift, Ctrl, Space, Esc, P, O, Enter; others offset). */
+/** A VK code → the evdev code HoldMachine expects (Alt, Super, Shift, Ctrl, Space, Esc, P, O, E, Enter; others offset). */
 export function vkToCode(vk: number): number {
   switch (vk) {
     case VK.MENU: case VK.LMENU: return KEY.LEFTALT;
@@ -42,6 +42,7 @@ export function vkToCode(vk: number): number {
     case VK.ESCAPE: return KEY.ESC;
     case VK.P: return KEY.P;
     case VK.O: return KEY.O;
+    case VK.E: return KEY.E;
     case VK.RETURN: return KEY.ENTER;
     default: return OTHER + vk;
   }

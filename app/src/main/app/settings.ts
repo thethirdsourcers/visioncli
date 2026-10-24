@@ -62,6 +62,7 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     startAtLogin: p.startAtLogin,
     autoUpdate: settings.get("autoUpdate"),
     screenshotEvery: settings.get("screenshotEveryQuestion"),
+    errorWatcher: settings.get("errorWatcher"),
     hideFromCapture: settings.get("hideFromCapture"),
     canHideFromCapture: canHideFromCapture(),
     project: this.currentProject,
@@ -157,6 +158,7 @@ App.prototype.settingsAction = async function (this: App, name, value) {
     // General
     case "setStartAtLogin": await this.setStartAtLogin(v); break;
     case "setScreenshotEvery": settings.set("screenshotEveryQuestion", v); break;
+    case "setErrorWatcher": settings.set("errorWatcher", v); break;
     case "pickProject": if (v) this.pickProject(v); break;
     case "chooseProjectFolder": await this.chooseProjectFolder(); break;
     case "setHideFromCapture": settings.set("hideFromCapture", v); this.windows.refreshMenu(); break;

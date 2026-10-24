@@ -52,6 +52,7 @@ import "./app/meeting";
 import "./app/setup";
 import "./app/voice";
 import "./app/control";
+import "./app/errors";
 import "./app/debug";
 
 export { App } from "./app/core";
@@ -196,6 +197,7 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   // ── Computer control, crashes ──
   await a.startComputerControl();
   a.startCrashWatcher();
+  a.startErrorWatcher();
 
   // ── Meeting Notes: off at every launch (the shortcut's card, or Settings → Meeting Notes) ──
   a.meetingUI = createMeetingUI();
@@ -343,7 +345,7 @@ App.prototype.shutdown = async function (this: App, crash: CrashReporter) {
   try { this.sessions?.closeAll(); } catch {}
   try { this.engine?.stop(); } catch {}
   try { this.speaker?.stop(); this.speaker?.kokoro.stop(); } catch {}
-  try { this.meeting?.stop(); this.crashWatcher?.stop(); this.updater?.stop(); } catch {}
+  try { this.meeting?.stop(); this.crashWatcher?.stop(); this.errorWatcher?.stop(); this.updater?.stop(); } catch {}
   try { this.browseProc?.kill("SIGTERM"); } catch {}
   try { await this.control?.stop(); } catch {}
   try { this.windows?.destroy(); this.ui?.destroy(); this.meetingUI?.destroy(); } catch {}

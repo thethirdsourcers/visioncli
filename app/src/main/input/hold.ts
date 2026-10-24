@@ -111,7 +111,7 @@ export class HoldMachine {
       const altOnly = f.alt && !f.sup && !f.shift && !f.ctrl;
       const none = !f.alt && !f.sup && !f.shift && !f.ctrl;
       const key = code === KEY.ESC && none ? "esc" : !altOnly ? null
-        : code === KEY.P ? "pin" : code === KEY.O ? "open" : code === KEY.ENTER || code === KEY.KPENTER ? "allow" : null;
+        : code === KEY.P ? "pin" : code === KEY.O ? "open" : code === KEY.E ? "fix" : code === KEY.ENTER || code === KEY.KPENTER ? "allow" : null;
       if (key) { this.cancelPending(true); this.emit({ type: "overlayKey", key }); return; }
     }
     if (code === KEY.SPACE && f.alt && f.shift && !f.sup && !f.ctrl) {

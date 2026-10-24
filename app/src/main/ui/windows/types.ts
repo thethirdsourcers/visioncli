@@ -65,6 +65,7 @@ export interface SettingsSnapshot {
   startAtLogin: boolean;
   autoUpdate: boolean;
   screenshotEvery: boolean;
+  errorWatcher: boolean;               // Spot errors in the terminal
   hideFromCapture: boolean;
   canHideFromCapture: boolean;         // false on Linux (no way to exclude a window from capture)
   project: string;                     // the project questions go to (picked by hand)
@@ -142,6 +143,7 @@ export interface SettingsActions {
   // General
   setStartAtLogin: boolean;
   setScreenshotEvery: boolean;
+  setErrorWatcher: boolean;
   setHideFromCapture: boolean;
   pickProject: string;                 // a path
   chooseProjectFolder: undefined;

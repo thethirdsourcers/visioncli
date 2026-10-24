@@ -21,6 +21,7 @@ export interface SettingsShape {
   assistant: Assistant;
   effort: string | null;
   watchCrashes: boolean;
+  errorWatcher: boolean;         // spot new errors in terminal panes and offer Alt+E to fix them
   computerControl: "ask" | "auto" | "off";
   agyModel: string | null;
   smartRouting: boolean;
@@ -52,7 +53,7 @@ export interface SettingsShape {
 
 export const DEFAULTS: SettingsShape = {
   speak: false, model: "default", stt: "whisper", whisperModel: "small.en", tts: "kokoro", speechSpeed: 2, kokoroVoice: "af_heart",
-  voice: null, terminalMode: true, autoUpdate: true, assistant: "claude", effort: null, watchCrashes: true, computerControl: "ask",
+  voice: null, terminalMode: true, autoUpdate: true, assistant: "claude", effort: null, watchCrashes: true, errorWatcher: true, computerControl: "ask",
   agyModel: null, smartRouting: true, quickCommands: true, screenshotEveryQuestion: false, setupDone: false, setupStep: null,
   meetingSummarizeGuest: true, meetingSummarizeYou: false, meetingReplies: true, meetingCodeLookup: true, meetingRecord: true,
   usageInMenuBar: true, weeklyInMenuBar: false, pinnedProject: null, autoActivity: true,

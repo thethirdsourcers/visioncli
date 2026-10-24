@@ -19,7 +19,7 @@ export type HotkeyEvent =
   | { type: "holdCancel" }                      // another key or a click while holding (Alt+Tab, Alt+click…)
   | { type: "tap" }                             // a tap under 0.35 s: toggle tap mode (listen until the next tap)
   | { type: "pointMode" }                       // Alt+Shift+Space: drag a region
-  | { type: "overlayKey"; key: "esc" | "pin" | "open" | "allow" }; // Esc, Alt+P, Alt+O, Alt+Enter while grabbed
+  | { type: "overlayKey"; key: "esc" | "pin" | "open" | "allow" | "fix" }; // Esc, Alt+P, Alt+O, Alt+Enter, Alt+E while grabbed
 
 export interface Hotkeys extends EventEmitter {
   /** Starts listening; `backend` says how ("evdev", "xinput2"); `problem` explains what setup is missing, if any. */

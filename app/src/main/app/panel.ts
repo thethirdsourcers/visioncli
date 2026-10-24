@@ -43,6 +43,7 @@ App.prototype.set = function (this: App, phase: Phase) {
 };
 
 App.prototype.setOverlayKeys = function (this: App, keys: Partial<Record<OverlayKey, boolean>>) {
+  keys = { ...keys, fix: !!this.offeredError }; // Alt+E lives as long as the error offer, whatever the bubble does
   this.overlayKeys = keys;
   this.keys.set(keys);
   this.hotkeys.setOverlayKeys(this.keys.active);

@@ -80,6 +80,8 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
       switchRow("Screenshot every question",
         `Sends a screenshot of the window with every voice question (uses more tokens). Off: only when you hold Alt+${navigator.userAgent.includes("Windows") ? "Win" : "Super"} or drag a box; the assistant can still take a look itself.`,
         s.screenshotEvery, (on) => act("setScreenshotEvery", on)),
+      switchRow("Spot errors in the terminal", "When an error shows up in a terminal pane (tmux, kitty or WezTerm), offers Alt+E to have the assistant explain and fix it.",
+        s.errorWatcher, (on) => act("setErrorWatcher", on)),
     ]),
     card("Updates", null, [
       row(`VisionCLI ${s.version}`, s.updateStatus ?? (s.updateAvailable ? `Version ${s.updateAvailable} is available.` : "Checks GitHub for new releases."),
