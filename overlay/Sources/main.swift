@@ -69,7 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     var candidates: (running: [(project: String, assistant: Assistant)], windows: [String]) = ([], [])
     var currentShots: [Shot] = []
     var currentWindow: WinInfo?
-    var withScreen = false // this question gets a screenshot (⌥⇧Space, or the "every question" setting)
+    var withScreen = false { // this question gets a screenshot (⌥⇧Space, or the "every question" setting)
+        didSet { state.screenshot = withScreen }
+    }
     var alwaysAllow: [String: Set<String>] = [:] // project → tools approved for the session
     // Computer control (see Control.swift)
     let controlServer = ControlServer()

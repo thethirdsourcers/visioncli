@@ -13,6 +13,7 @@ final class OverlayState: ObservableObject {
     @Published var pinned = false
     @Published var project = ""
     @Published var regionSelected = false
+    @Published var screenshot = false   // this question gets a screenshot (shown under the live text)
     @Published var permission: PermissionRequest?
     @Published var toast = ""
     @Published var speaking = false
@@ -122,6 +123,7 @@ struct Pill<Leading: View>: View {
     let text: String
     let placeholder: String
     var badge: String? = nil
+    var badgeSymbol: String? = nil
     var body: some View {
         HStack(spacing: 9) {
             leading
@@ -134,7 +136,11 @@ struct Pill<Leading: View>: View {
                     .frame(maxWidth: 300, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                 if let badge, !badge.isEmpty {
-                    Text(badge).font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
+                    HStack(spacing: 4) {
+                        if let badgeSymbol { Image(systemName: badgeSymbol).font(.system(size: 9)) }
+                        Text(badge).font(.system(size: 10))
+                    }
+                    .foregroundStyle(.white.opacity(0.4))
                 }
             }
         }
@@ -345,7 +351,8 @@ struct OverlayView: View {
             case .listening:
                 Pill(leading: LevelBars(level: s.level), text: s.question,
                      placeholder: s.status.isEmpty ? "Listening…" : s.status,
-                     badge: s.regionSelected ? "◻︎ area selected" : nil)
+                     badge: s.regionSelected ? "◻︎ area selected" : s.screenshot ? "with screenshot" : nil,
+                     badgeSymbol: s.regionSelected ? nil : "camera")
             case .thinking:
                 Pill(leading: Spinner(), text: s.status, placeholder: "Thinking…", badge: s.project.isEmpty ? nil : s.project)
             case .answering, .done, .error:
