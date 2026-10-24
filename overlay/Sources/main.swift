@@ -132,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
         MainThreadWatchdog.start()
         CaptureHiding.start()
         MeetingNotes.recoverRecordings()
+        ClaudeBackup.shared.start()
         // Writes to a helper that just exited (claude's stdin is written on a background queue) must fail with an
         // error, not kill the app with SIGPIPE.
         signal(SIGPIPE, SIG_IGN)

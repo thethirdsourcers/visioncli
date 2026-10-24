@@ -769,6 +769,7 @@ private struct AdvancedPage: View {
                 Button("Fix Permissions…") { m.run(m.hooks.fixPermissions) }
             }
         }
+        ClaudeBackupCard()
         Card("Files") {
             Row("Log", "What VisionCLI did, for troubleshooting.") { Button("Open Log") { m.hooks.openLog() } }
             if m.s.crashLogExists {
