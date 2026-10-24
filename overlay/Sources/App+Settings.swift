@@ -73,7 +73,7 @@ extension AppDelegate {
         let kokoroAvailable = VoiceModels.kokoroModel != nil
         s.speak = Settings.speak
         s.speed = Settings.speechSpeed
-        s.voice = kokoroAvailable && Settings.ttsEngine == "kokoro" ? Settings.kokoroVoice : nil
+        s.voice = (kokoroAvailable || Settings.kokoroVoice == VoiceModels.chatterboxId) && Settings.ttsEngine == "kokoro" ? Settings.kokoroVoice : nil
         s.kokoroVoices = kokoroAvailable ? VoiceModels.kokoroVoiceList.map { Item(id: $0.0, name: $0.1) } : []
         s.kokoroInstalled = ModelInstaller.kokoroInstalled
         s.installStatus = installer?.status

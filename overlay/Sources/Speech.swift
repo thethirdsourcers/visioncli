@@ -409,6 +409,8 @@ final class Speaker: NSObject, AVAudioPlayerDelegate {
         guard let url = entry else { pump(); return }
         do {
             let p = try AVAudioPlayer(contentsOf: url)
+            // Chatterbox has no speed option: play it faster instead (pitch kept).
+            if url.lastPathComponent.hasPrefix("tts-cb") { p.enableRate = true; p.rate = Float(min(2.0, Settings.speechSpeed)) }
             // The speaker picked in the menu (app-only), if it's still connected.
             if let uid = Settings.outputDeviceUID, AudioDevices.device(uid: uid) != nil { p.currentDevice = uid }
             player = p

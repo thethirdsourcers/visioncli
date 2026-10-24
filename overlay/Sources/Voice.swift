@@ -66,7 +66,7 @@ enum VoiceModels {
                 // Skip our own children: a helper this launch just started may have reused an old pid.
                 guard f.count == 3, let pid = Int32(f[0]), Int32(f[1]) != me else { continue }
                 let cmd = f[2]
-                if cmd.contains("whisper-server") || cmd.contains("parakeet-server") || cmd.contains("kokoro_server") || cmd.contains("kokoro-onnx") {
+                if cmd.contains("whisper-server") || cmd.contains("parakeet-server") || cmd.contains("kokoro_server") || cmd.contains("kokoro-onnx") || cmd.contains("chatterbox_server") {
                     kill(pid, SIGKILL)
                     log("killed stray helper \(pid)")
                 }
@@ -89,6 +89,8 @@ enum VoiceModels {
         ("af_heart", "Heart (US, warm)"), ("af_bella", "Bella (US)"), ("af_nicole", "Nicole (US, soft)"),
         ("am_michael", "Michael (US)"), ("am_adam", "Adam (US)"), ("bf_emma", "Emma (UK)"), ("bm_george", "George (UK)"),
     ]
+    /// The "voice" that switches the speech worker to Chatterbox Turbo (MLX): richer, about 2 s before it starts talking.
+    static let chatterboxId = "chatterbox"
 }
 
 // MARK: - Whisper
@@ -298,20 +300,33 @@ final class KokoroEngine {
     init(cfg: Config) { self.cfg = cfg }
 
     var isRunning: Bool { proc?.isRunning == true }
+    /// The running worker is Chatterbox, not Kokoro (same protocol; picked by the chosen voice).
+    private(set) var chatterbox = false
 
     func start() {
-        guard !isRunning,
-              let uv = VoiceModels.binary("uv", path: cfg.path),
-              let model = VoiceModels.kokoroModel, let voices = VoiceModels.kokoroVoices,
-              let script = Bundle.main.path(forResource: "kokoro_server", ofType: "py") else {
-            log("kokoro unavailable (needs uv, kokoro-v1.0.onnx, voices-v1.0.bin)")
+        let wantChatterbox = Settings.kokoroVoice == VoiceModels.chatterboxId
+        if isRunning, wantChatterbox != chatterbox { stop() }
+        guard !isRunning, let uv = VoiceModels.binary("uv", path: cfg.path),
+              let script = Bundle.main.path(forResource: wantChatterbox ? "chatterbox_server" : "kokoro_server", ofType: "py") else {
+            log("speech worker unavailable (needs uv)")
             return
         }
         let outDir = FileManager.default.temporaryDirectory.appendingPathComponent("visioncli-tts")
+        let args: [String]
+        if wantChatterbox {
+            args = ["run", "--quiet", "--python", "3.11", "--with", "mlx-audio", "--with", "soundfile", "python", script, outDir.path]
+        } else {
+            guard let model = VoiceModels.kokoroModel, let voices = VoiceModels.kokoroVoices else {
+                log("kokoro unavailable (needs kokoro-v1.0.onnx, voices-v1.0.bin)")
+                return
+            }
+            args = ["run", "--quiet", "--with", "kokoro-onnx", "--with", "soundfile", "python", script, model, voices, outDir.path]
+        }
+        chatterbox = wantChatterbox
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: uv)
-        p.arguments = ["run", "--quiet", "--with", "kokoro-onnx", "--with", "soundfile", "python", script, model, voices, outDir.path]
+        p.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = cfg.path
         p.environment = env
@@ -343,7 +358,7 @@ final class KokoroEngine {
         proc = p
         VoiceModels.remember(p.processIdentifier)
         stdin = inp.fileHandleForWriting
-        log("kokoro starting")
+        log("\(chatterbox ? "chatterbox" : "kokoro") starting")
     }
 
     func stop() {
@@ -369,7 +384,7 @@ final class KokoroEngine {
     private func handle(_ obj: [String: Any]) {
         if obj["ready"] as? Bool == true {
             ready = true
-            log("kokoro ready")
+            log("\(chatterbox ? "chatterbox" : "kokoro") ready")
             return
         }
         guard let id = obj["id"] as? Int, let cb = callbacks.removeValue(forKey: id) else { return }

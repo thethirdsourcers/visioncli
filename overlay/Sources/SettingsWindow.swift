@@ -533,6 +533,8 @@ private struct VoicePage: View {
                 voiceRow(v.id, "Kokoro · \(v.name)")
                 Divider()
             }
+            voiceRow(VoiceModels.chatterboxId, "Chatterbox Turbo · richer, about 2 s before it speaks (downloads ~600 MB the first time)")
+            Divider()
             voiceRow(nil, "macOS voice")
             if !s.kokoroInstalled {
                 Divider()
