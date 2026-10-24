@@ -21,6 +21,7 @@ extension AppDelegate {
         case (.pin, true): modifierHold.cancel(); togglePin()
         case (.open, true): modifierHold.cancel(); openFirstReference()
         case (.allow, true): modifierHold.cancel(); approve(true, always: false)
+        case (.fixError, true): modifierHold.cancel(); fixOfferedError()
         default: break
         }
     }

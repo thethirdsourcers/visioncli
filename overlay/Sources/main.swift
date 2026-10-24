@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     var whisper: WhisperEngine?
     var parakeet: ParakeetEngine?
     let flow = FlowDictation()
+    let errorWatcher = ErrorWatcher()
+    var offeredError: TerminalError?
+    var errorOfferWork: DispatchWorkItem?
     let spotlight = Spotlight()
     let meeting = MeetingNotes()
     lazy var meetingPanel = MeetingPanel(notes: meeting)
@@ -133,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
         CaptureHiding.start()
         MeetingNotes.recoverRecordings()
         ClaudeBackup.shared.start()
+        errorWatcher.onError = { [weak self] e in self?.offerFix(e) }
+        errorWatcher.start()
         // Writes to a helper that just exited (claude's stdin is written on a background queue) must fail with an
         // error, not kill the app with SIGPIPE.
         signal(SIGPIPE, SIG_IGN)

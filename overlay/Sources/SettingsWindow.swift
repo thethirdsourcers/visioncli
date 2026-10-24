@@ -419,6 +419,8 @@ private struct GeneralPage: View {
                 }
             }
             Divider()
+            ErrorWatcherSwitch()
+            Divider()
             SwitchRow("Check for updates automatically", "At launch and every 6 hours.", isOn: m.bind(\.autoUpdate) { Settings.autoUpdate = $0 })
         }
         Card("Setup") {

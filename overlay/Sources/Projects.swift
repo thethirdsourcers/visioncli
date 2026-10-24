@@ -99,7 +99,7 @@ final class ProjectResolver {
         return kids.contains { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }
     }
 
-    private func gitRoot(_ path: String) -> String {
+    func gitRoot(_ path: String) -> String {
         var dir = path
         while dir != "/" && dir != home.path {
             if fm.fileExists(atPath: "\(dir)/.git") { return dir }
