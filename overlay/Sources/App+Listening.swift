@@ -129,7 +129,7 @@ extension AppDelegate {
         }
 
         if point {
-            state.status = "Drag around what you mean, or tap ⌥⇧Space for the whole window…"
+            state.status = "Drag around what you mean, or tap \(HotKey.point.shortcut.label) for the whole window…"
             selector.begin { [weak self] rect in
                 guard let self, let rect else { return }
                 self.region = rect
@@ -137,7 +137,7 @@ extension AppDelegate {
                 self.state.status = ""
                 self.highlight.show([(Geometry.toAppKit(rect), "")], persistent: true)
                 // Keys already released while dragging (hold mode): send now.
-                let held = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(kVK_Space))
+                let held = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(HotKey.point.shortcut.code))
                 if !held && Date().timeIntervalSince(self.pressedAt) >= 0.35 && self.state.phase == .listening { self.finishListening() }
             }
         }
@@ -145,9 +145,10 @@ extension AppDelegate {
         // Carbon doesn't always deliver the key-up (e.g. when Option is let go first), so also watch the keys directly.
         keyPoll?.invalidate()
         keyPoll = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] _ in
-            let space = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(kVK_Space))
+            let pointKey = HotKey.point.shortcut
+            let space = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(pointKey.code))
             // ⌥⇧Space holds Space and Option; ⌥ / ⌥⌘ are held on their own (⌃Space without Accessibility).
-            let held = point ? space && NSEvent.modifierFlags.contains(.option) : ModifierHold.keyDown
+            let held = point ? space && NSEvent.modifierFlags.contains(pointKey.flags.subtracting(.shift)) : ModifierHold.keyDown
             if !held { self?.keysReleased() }
         }
         RunLoop.main.add(keyPoll!, forMode: .common)

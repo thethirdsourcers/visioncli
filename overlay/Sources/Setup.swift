@@ -438,9 +438,9 @@ private struct SetupView: View {
         case .welcome:
             header("Welcome to VisionCLI", "Ask Claude about anything on your screen, out loud. This takes about a minute.")
             VStack(alignment: .leading, spacing: 10) {
-                keyRow("⌥", "Hold Option, ask, let go: the answer appears in the corner.")
-                keyRow("⌥ ⌘", "Hold Option and Command to include a screenshot of the window.")
-                keyRow("⌥ ⇧ Space", "Drag a box around what you mean.")
+                keyRow(HoldKey.current.symbol, "Hold \(HoldKey.current.name), ask, let go: the answer appears in the corner.")
+                keyRow(HoldKey.current.screenSymbol, "Hold both to include a screenshot of the window.")
+                keyRow(HotKey.point.shortcut.label, "Drag a box around what you mean.")
             }
             .padding(.top, 8)
             if let img = Bundle.main.url(forResource: "peek", withExtension: "png", subdirectory: "mascot").flatMap(NSImage.init(contentsOf:)) {

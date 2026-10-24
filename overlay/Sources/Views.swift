@@ -261,9 +261,9 @@ struct AnswerBubble: View {
                 Text(s.toast).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             if Markup.firstFileRef(s.answer) != nil {
-                IconButton(symbol: "arrow.up.forward.square", help: "Open file (⌥O)") { actions?.openFirstReference() }
+                IconButton(symbol: "arrow.up.forward.square", help: "Open file (\(HotKey.open.shortcut.label))") { actions?.openFirstReference() }
             }
-            IconButton(symbol: s.pinned ? "pin.slash" : "pin", help: s.pinned ? "Unpin (⌥P)" : "Pin (⌥P)", active: s.pinned) { actions?.togglePin() }
+            IconButton(symbol: s.pinned ? "pin.slash" : "pin", help: s.pinned ? "Unpin (\(HotKey.pin.shortcut.label))" : "Pin (\(HotKey.pin.shortcut.label))", active: s.pinned) { actions?.togglePin() }
             IconButton(symbol: "xmark", help: "Close (esc)") { actions?.dismiss() }
         }
     }
@@ -331,7 +331,7 @@ struct ApprovalCard: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.35)))
                 HStack(spacing: 8) {
                     Button { actions?.approve(true, always: false) } label: {
-                        Text("Allow  ⌥↩").font(.system(size: 12, weight: .semibold)).padding(.horizontal, 12).padding(.vertical, 5)
+                        Text("Allow  \(HotKey.allow.shortcut.label)").font(.system(size: 12, weight: .semibold)).padding(.horizontal, 12).padding(.vertical, 5)
                             .background(Capsule().fill(Color.cyan.opacity(0.85))).foregroundStyle(.black)
                     }.buttonStyle(.plain)
                     Button { actions?.approve(true, always: true) } label: {

@@ -123,7 +123,7 @@ extension AppDelegate {
         guard state.phase == .hidden || state.phase == .done || state.phase == .error else { return } // busy: don't interrupt
         log("error watcher: \(e.tab): \(e.text.split(separator: "\n").last ?? "")")
         offeredError = e
-        ActivityBadge.shared.show("exclamationmark.triangle.fill", "Error in \(e.folder.map { ($0 as NSString).lastPathComponent } ?? (e.tab.isEmpty ? "the terminal" : e.tab))  ·  ⌥E to fix", tint: .orange, seconds: 20)
+        ActivityBadge.shared.show("exclamationmark.triangle.fill", "Error in \(e.folder.map { ($0 as NSString).lastPathComponent } ?? (e.tab.isEmpty ? "the terminal" : e.tab))  ·  \(HotKey.fixError.shortcut.label) to fix", tint: .orange, seconds: 20)
         hotkeys.set(.fixError, true)
         errorOfferWork?.cancel()
         let w = DispatchWorkItem { [weak self] in self?.offeredError = nil; self?.hotkeys.set(.fixError, false) }

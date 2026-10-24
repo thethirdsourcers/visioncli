@@ -410,9 +410,10 @@ private struct GeneralPage: View {
             SwitchRow("Start at login", "Opens VisionCLI when you log in to your Mac.", isOn: m.bind(\.startAtLogin, m.hooks.setStartAtLogin))
             Divider()
             SwitchRow("Screenshot every question",
-                      "Sends a screenshot of the window with every voice question (uses more tokens). Off: only when you hold ⌥⌘ or drag a box; the assistant can still take a look itself.",
+                      "Sends a screenshot of the window with every voice question (uses more tokens). Off: only when you hold \(HoldKey.current.screenSymbol) or drag a box; the assistant can still take a look itself.",
                       isOn: m.bind(\.screenshotEvery) { Settings.screenshotEveryQuestion = $0 })
         }
+        ShortcutsCard()
         Card("Updates") {
             Row("VisionCLI \(m.s.version)", m.s.updateStatus ?? m.s.updateAvailable.map { "Version \($0) is available." } ?? "Checks GitHub for new releases.") {
                 if m.s.updateStatus != nil {
