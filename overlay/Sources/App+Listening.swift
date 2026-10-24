@@ -123,7 +123,7 @@ extension AppDelegate {
         }
 
         if external {
-            state.status = "Listening with Wispr Flow…"
+            state.status = ""
             timed("flow.begin") { flow.begin() }
         }
 
@@ -183,7 +183,7 @@ extension AppDelegate {
         if Settings.sttEngine == "external" {
             if selector.isActive { selector.cancel() }
             set(.thinking)
-            state.status = "Wispr Flow is transcribing…"
+            state.status = "Transcribing…"
             var preview = state.question.trimmingCharacters(in: .whitespacesAndNewlines)
             listener.stop(done: { final in if !final.isEmpty { preview = final } })
             flow.end { [weak self] text in
