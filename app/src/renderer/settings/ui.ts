@@ -57,6 +57,7 @@ const PATHS: Record<string, string> = {
   check: '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M7.5 12.2l3 3 6-6.2" stroke="#fff" stroke-width="2.2"/>',
   dotted: '<circle cx="12" cy="12" r="9" stroke-dasharray="2 2.6"/>',
   play: '<circle cx="12" cy="12" r="9.5"/><path d="M10 8.3l5.5 3.7-5.5 3.7z" fill="currentColor"/>',
+  gauge: '<path d="M3.5 17a8.5 8.5 0 1 1 17 0"/><path d="M12 17l3.5-5.5"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/><path d="M6.5 13h.01M8.5 9.5h.01M12 8h.01M17.5 13h.01"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/>',
   copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>',
   trash: '<path d="M4 6.5h16M9 6.5V4.5h6v2M6.5 6.5l1 13.5h9l1-13.5"/>',

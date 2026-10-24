@@ -217,7 +217,14 @@ export interface SettingsActions {
 }
 export type SettingsActionName = keyof SettingsActions;
 
-export type SettingsSection = "general" | "assistant" | "voice" | "control" | "meetings" | "integrations" | "advanced";
+export type SettingsSection = "general" | "assistant" | "voice" | "control" | "meetings" | "integrations" | "usage" | "advanced";
+
+/** Settings → Usage (ResourceUsage.swift), asked for every 2 s while the page is open. Each list ends with a Total row. */
+export interface ResourceUsageView {
+  running: { name: string; cpu: string | null; memory: string }[];  // "VisionCLI app  ·  5 processes", "12% CPU", "310 MB"
+  disk: { name: string; path: string | null; size: string }[];       // path: what Show in Folder reveals (null: Total)
+  cpu: boolean;                                                      // false on Windows: memory only
+}
 
 // ── Setup wizard (Setup.swift), Linux steps ─────────────────────────────────────────────────────────────────────
 
@@ -270,6 +277,9 @@ export interface WindowsBridge {
   };
   setupChecks(): SetupChecks | Promise<SetupChecks>;
   setupFix(step: SetupStepId): void | Promise<void>;
+  /** Settings → Usage: the processes and disk (settings:usage), and Show in Folder for one of its paths. */
+  resourceUsage?(): Promise<ResourceUsageView>;
+  showResource?(path: string): void;
   /** Setup finished (or closed with everything required done): the orchestrator sets setupDone. Optional. */
   setupFinished?(): void;
 }

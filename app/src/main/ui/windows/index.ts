@@ -16,7 +16,7 @@ export type * from "./types";
 // The tray, Settings, History and Setup windows (App+Menu, SettingsWindow, HistoryWindow, SetupWizard on macOS).
 // Each window is a page under renderer/ talking to main over a few IPC channels:
 //   settings:get → SettingsSnapshot · settings:action {name, value} → SettingsSnapshot · push settings:snapshot,
-//   settings:section · history:get / clear / remove / copy / open / thumb · push history:changed ·
+//   settings:section · settings:usage / showResource · history:get / clear / remove / copy / open / thumb · push history:changed ·
 //   setup:get → {checks, settings, step} · setup:fix / go / finish / copy · push setup:state, setup:step.
 
 export interface WindowsOptions {
@@ -26,7 +26,7 @@ export interface WindowsOptions {
   noTray?: boolean;
 }
 
-const SECTIONS: SettingsSection[] = ["general", "assistant", "voice", "control", "meetings", "integrations", "advanced"];
+const SECTIONS: SettingsSection[] = ["general", "assistant", "voice", "control", "meetings", "integrations", "usage", "advanced"];
 export const SETUP_STEPS: SetupStepId[] = ["welcome", "microphone", "keyboard", "screen", "control", "terminal", "transcription", "voice", "assistant", "addons", "done"];
 
 export function createWindowsUI(bridge: WindowsBridge, opts: WindowsOptions = {}): WindowsUI {
@@ -103,6 +103,8 @@ export function createWindowsUI(bridge: WindowsBridge, opts: WindowsOptions = {}
   });
   handle("settings:section", (_e, section: string) => { if (SECTIONS.includes(section as SettingsSection)) settings.set("settingsSection", section); });
   handle("settings:openSetup", () => openSetup());
+  handle("settings:usage", () => bridge.resourceUsage?.() ?? null);
+  handle("settings:showResource", (_e, path: string) => bridge.showResource?.(String(path)));
 
   // ── History ──
   const display = (answer: string) => (bridge.history.display ? bridge.history.display(answer) : answer);

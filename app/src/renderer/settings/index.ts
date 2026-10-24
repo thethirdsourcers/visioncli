@@ -1,4 +1,4 @@
-import type { AssistantId, SettingsActionName, SettingsActions, SettingsSection, SettingsSnapshot } from "../../main/ui/windows/types";
+import type { AssistantId, ResourceUsageView, SettingsActionName, SettingsActions, SettingsSection, SettingsSnapshot } from "../../main/ui/windows/types";
 import {
   allowed, button, card, h, icon, installProgress, poll, progress, radioMark, radioRow, row, segmented, select, spinner, switchRow, tile,
   type Child, type Option,
@@ -14,6 +14,7 @@ const SECTIONS: { id: SettingsSection; title: string; subtitle: string; icon: st
   { id: "control", title: "Computer Control", subtitle: "Let the assistant click and type for you, with your approval.", icon: "cursor", tint: "#007aff" },
   { id: "meetings", title: "Meeting Notes", subtitle: "Notes, summaries and suggested replies in your meetings, with a recording to play back.", icon: "people", tint: "#ff9500" },
   { id: "integrations", title: "Integrations", subtitle: "Connect VisionCLI's tools (look, click, browser…) to your AI command-line tools.", icon: "puzzle", tint: "#34c759" },
+  { id: "usage", title: "Usage", subtitle: "Memory, CPU and disk used by VisionCLI, its voices and speech models.", icon: "gauge", tint: "#30b0c7" },
   { id: "advanced", title: "Advanced", subtitle: "Permissions, logs and files.", icon: "wrench", tint: "#737373" },
 ];
 
@@ -42,6 +43,7 @@ function choose(id: SettingsSection) {
   section = id;
   void window.vcli.invoke("settings:section", id);
   render(true);
+  void refreshUsage();
 }
 
 // ── Layout ──
@@ -274,6 +276,24 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
     ];
   },
 
+  usage: () => {
+    const u = usage;
+    const cell = (text: string | null, bold: boolean) =>
+      h("span", { style: { width: "90px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: bold ? "600" : "", color: bold ? "" : "var(--secondary)" } }, text ?? "");
+    const line = (name: string, cells: Child[]) => {
+      const bold = name === "Total";
+      return h("div.row", null, h("div.row-text", null, h("div.row-title", { style: { fontWeight: bold ? "600" : "" } }, name)), h("div.row-control", null, cells));
+    };
+    return [
+      card("Running now", (u?.cpu === false ? "" : "CPU is a share of one core (100% = one full core). ") + "Updates every 2 seconds.",
+        !u?.running.length ? [h("p.note", { style: { padding: "8px 0" } }, "Reading…")]
+          : u.running.map((p) => line(p.name, [u.cpu && cell(p.cpu, p.name === "Total"), cell(p.memory, p.name === "Total")]))),
+      u?.disk.length ? card("On disk", null, u.disk.map((d) => line(d.name, [cell(d.size, !d.path),
+        d.path ? h("button.icon-button", { title: "Show in Folder", onclick: () => window.vcli.invoke("settings:showResource", d.path) }, icon("search", 15))
+          : h("span", { style: { width: "26px" } })]))) : null,
+    ];
+  },
+
   advanced: (s) => [
     card(null, null, [
       row("Desktop", s.desktopProblem ?? "Everything VisionCLI needs from your desktop is available.", h("span.muted", null, s.desktop), { detailClass: s.desktopProblem ? "error" : undefined }),
@@ -354,12 +374,21 @@ function parakeetProgress(s: SettingsSnapshot): HTMLElement {
   return h("div.install", null, progress(p), h("div.row-detail", null, p < 0.98 ? `Downloading Parakeet… ${Math.round(p * 100)}%` : "Preparing the model…"));
 }
 
+let usage: ResourceUsageView | null = null;
+
+async function refreshUsage() {
+  if (section !== "usage") return;
+  usage = await window.vcli.invoke("settings:usage");
+  render();
+}
+
 // ── Wiring ──
 
 window.vcli.on("settings:snapshot", (next: SettingsSnapshot) => show(next));
-window.vcli.on("settings:section", (id: SettingsSection) => { if (SECTIONS.some((x) => x.id === id)) { section = id; render(true); } });
+window.vcli.on("settings:section", (id: SettingsSection) => { if (SECTIONS.some((x) => x.id === id)) { section = id; render(true); void refreshUsage(); } });
 // Things change behind the window's back: downloads progress, devices come and go, access gets granted.
 poll(async () => show(await window.vcli.invoke("settings:get")), 1500);
+poll(refreshUsage, 2000); // Settings → Usage, only while it's the page shown
 void (async () => {
   show(await window.vcli.invoke("settings:get"), true);
   void act("checkTools");

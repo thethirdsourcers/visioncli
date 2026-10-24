@@ -55,6 +55,7 @@ import "./app/voice";
 import "./app/control";
 import "./app/errors";
 import "./app/backup";
+import "./app/resources";
 import "./app/debug";
 
 export { App } from "./app/core";
@@ -193,6 +194,8 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
     },
     setupChecks: () => a.setupChecks(),
     setupFix: (step) => a.setupFix(step),
+    resourceUsage: () => a.resourceUsage(),
+    showResource: (path) => a.showResource(path),
     setupFinished: () => log("setup: finished"),
   });
   a.history.on("change", () => a.windows.refreshMenu());
