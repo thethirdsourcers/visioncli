@@ -1,4 +1,5 @@
 // Add-ons for Claude Code (AddOns.swift): the installed checks, and the setup step's state.
+import "../assistant/_env"; // a throwaway HOME: the install below logs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";

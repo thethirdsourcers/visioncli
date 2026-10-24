@@ -280,6 +280,7 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
       row("Reset permissions", "If screen capture or clicking stopped working: forgets the saved screen-sharing and remote-control consent so your desktop asks again.",
         button("Reset Permissions…", () => act("fixPermissions"))),
     ]),
+    backupCard(s),
     card("Files", null, [
       row("Log", "What VisionCLI did, for troubleshooting.", button("Open Log", () => act("openLog"))),
       s.crashLogExists && row("Crash log", "Details of the last crash.", button("Open Crash Log", () => act("openCrashLog"))),
@@ -303,6 +304,48 @@ function modelRow(s: SettingsSnapshot): HTMLElement {
   const opts: Option[] = s.claudeModels.map((m) => ({ value: m.id, label: m.name, divider: m.id === "opusplan" }));
   if (!s.claudeModels.some((m) => m.id === s.claudeModel)) opts.push({ value: s.claudeModel, label: s.claudeModel });
   return row("Model", "A running terminal Claude switches too.", select(s.claudeModel, opts, (v) => act("setClaudeModel", v)));
+}
+
+let backupPassword = "";
+
+/** Claude backup: where backups go, and back up / restore by hand (ClaudeBackupCard). */
+function backupCard(s: SettingsSnapshot): HTMLElement {
+  const b = s.backup;
+  const home = s.homeProject.replace(/[\\/]VisionCLI$/, "");
+  const where = b.folder && (b.folder.startsWith(home) ? "~" + b.folder.slice(home.length) : b.folder);
+  const buttons = (...list: Child[]) => h("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px", padding: "8px 0" } }, list);
+  const rows: Child[] = [
+    h("div.row", null,
+      h("div.row-text", null,
+        h("div.row-title", null, "Back up ~/.claude daily"),
+        h("div.row-detail", null, where ? `To ${where}` : "Everything Claude Code knows (CLAUDE.md, settings, skills, memory, plugins, conversations), encrypted, into a folder you pick such as one synced by Google Drive. After the first backup, only what changed is added."),
+        b.status && h("div.row-detail", null, b.status),
+        b.fraction != null && h("div", { style: { maxWidth: "260px", paddingTop: "2px" } }, progress(b.fraction))),
+      h("div.row-control", null, b.running && spinner(), button(b.folder ? "Change…" : "Choose Folder…", () => act("backupChooseFolder"), { disabled: b.running }))),
+  ];
+  if (b.askPassword) {
+    const submit = () => { const pw = backupPassword; backupPassword = ""; void act("backupPassword", pw); };
+    rows.push(buttons(
+      h("input", { type: "password", placeholder: "Backup password", "data-key": "backup-password", value: backupPassword, style: { flex: "1", minWidth: "160px" },
+        oninput: (e: Event) => { backupPassword = (e.target as HTMLInputElement).value; },
+        onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter") submit(); } }),
+      button("Use Backups", submit, { primary: true }),
+      button("Cancel", () => { backupPassword = ""; void act("backupCancel"); })));
+  } else if (b.snapshots) {
+    const pick = select(b.snapshots[0]?.id ?? "", b.snapshots.map((x) => ({ value: x.id, label: x.name })), () => {});
+    rows.push(h("div", null,
+      h("p.row-detail", { style: { padding: "8px 0 0" } }, "Quit Claude Code first. Your current ~/.claude and ~/.claude.json are moved to ~/.claude-before-restore-… (not deleted), then the backup is put in their place."),
+      buttons(pick, button("Restore", () => act("backupRestoreSnapshot", pick.value), { primary: true }), button("Cancel", () => act("backupCancel")))));
+  } else if (b.folder) {
+    rows.push(buttons(
+      button("Back Up Now", () => act("backupNow"), { disabled: b.running }),
+      button("Restore…", () => act("backupRestore"), { disabled: b.running }),
+      button("Show Backups", () => act("backupShow")),
+      h("span.grow", { style: { flex: "1" } }),
+      button("Copy Password", () => act("backupCopyPassword")),
+      button("Turn Off", () => act("backupOff"), { disabled: b.running })));
+  }
+  return card("Claude backup", null, rows);
 }
 
 function parakeetProgress(s: SettingsSnapshot): HTMLElement {

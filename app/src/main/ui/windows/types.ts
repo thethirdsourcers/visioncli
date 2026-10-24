@@ -138,6 +138,16 @@ export interface SettingsSnapshot {
   desktopProblem: string | null;       // Desktop.problem()
   crashLogExists: boolean;
   homeProject: string;
+  /** Claude backup (ClaudeBackup.swift). */
+  backup: {
+    restic: boolean;                   // restic is on PATH
+    folder: string | null;             // null = off
+    running: boolean;
+    status: string;
+    fraction: number | null;           // 0…1 while a backup or restore runs
+    askPassword: boolean;              // the folder picked has backups: their password is needed
+    snapshots: Item[] | null;          // the Restore… picker (newest first), null when closed
+  };
 }
 
 /** settingsAction(name, value): the Settings window's (and setup wizard's) controls. */
@@ -195,6 +205,15 @@ export interface SettingsActions {
   openLog: undefined;
   openCrashLog: undefined;
   openHome: undefined;
+  backupChooseFolder: undefined;
+  backupPassword: string;              // for backups already in the folder picked
+  backupCancel: undefined;             // closes the password prompt or the restore picker
+  backupNow: undefined;
+  backupRestore: undefined;            // opens the snapshot picker
+  backupRestoreSnapshot: string;       // snapshot id
+  backupShow: undefined;
+  backupCopyPassword: undefined;
+  backupOff: undefined;
 }
 export type SettingsActionName = keyof SettingsActions;
 
