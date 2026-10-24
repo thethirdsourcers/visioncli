@@ -297,13 +297,25 @@ final class KokoroEngine {
         VoiceModels.kokoroModel != nil && VoiceModels.kokoroVoices != nil && VoiceModels.binary("uv", path: ProcessInfo.processInfo.environment["PATH"] ?? "") != nil
     }
 
-    init(cfg: Config) { self.cfg = cfg }
+    private var lastUse = Date()
+    private var idleTimer: Timer?
+
+    init(cfg: Config) {
+        self.cfg = cfg
+        // A voice model holds a few hundred MB: let it go after 10 idle minutes (the next answer starts it again).
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self, self.isRunning, self.callbacks.isEmpty, Date().timeIntervalSince(self.lastUse) > 600 else { return }
+            log("\(self.chatterbox ? "chatterbox" : "kokoro") idle for 10 minutes; unloading")
+            self.stop()
+        }
+    }
 
     var isRunning: Bool { proc?.isRunning == true }
     /// The running worker is Chatterbox, not Kokoro (same protocol; picked by the chosen voice).
     private(set) var chatterbox = false
 
     func start() {
+        lastUse = Date()
         let wantChatterbox = Settings.kokoroVoice == VoiceModels.chatterboxId
         if isRunning, wantChatterbox != chatterbox { stop() }
         guard !isRunning, let uv = VoiceModels.binary("uv", path: cfg.path),
@@ -371,6 +383,7 @@ final class KokoroEngine {
 
     /// Queue text for synthesis; the callback gets a WAV file (or nil) on the main thread.
     func synth(_ text: String, voice: String, speed: Double, _ done: @escaping (URL?) -> Void) {
+        lastUse = Date()
         if !isRunning { start() }
         guard let stdin else { done(nil); return }
         nextId += 1

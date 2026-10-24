@@ -27,9 +27,14 @@ final class ErrorWatcher {
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.poll() }
     }
 
+    private var lastPoll = Date.distantPast
+
     private func poll() {
-        guard Self.enabled, !busy,
+        // Every 5 s while iTerm is in front, every 20 s otherwise (each look runs AppleScript over every tab).
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.googlecode.iterm2"
+        guard Self.enabled, !busy, front || Date().timeIntervalSince(lastPoll) >= 20,
               NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == "com.googlecode.iterm2" }) else { return }
+        lastPoll = Date()
         busy = true
         queue.async { [weak self] in
             guard let self else { return }

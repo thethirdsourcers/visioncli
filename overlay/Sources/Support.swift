@@ -488,12 +488,28 @@ enum MainThreadWatchdog {
         DispatchQueue.main.async { isAnswered = true }
         queue.asyncAfter(deadline: .now() + 0.25) {
             if !isAnswered {
-                // Wait for it to come back, then report how long the main thread was stuck.
-                while !isAnswered { Thread.sleep(forTimeInterval: 0.02) }
+                // Still stuck after a second: record where (the main thread's stack), to know what to move off it.
+                var sampled = false
+                while !isAnswered {
+                    Thread.sleep(forTimeInterval: 0.02)
+                    if !sampled, Date().timeIntervalSince(sent) > 1 { sampled = true; DispatchQueue.global().async { logMainStack() } }
+                }
                 log("watchdog: main thread blocked \(Int(Date().timeIntervalSince(sent) * 1000))ms")
             }
             queue.asyncAfter(deadline: .now() + 0.25) { tick() }
         }
+    }
+
+    /// One second of `sample` on ourselves; logs the main thread's heaviest VisionCLI frames.
+    private static func logMainStack() {
+        let (_, out, _) = shell("/usr/bin/sample", ["\(getpid())", "1", "-mayDie"])
+        guard let start = out.range(of: "com.apple.main-thread") else { return }
+        let frames = out[start.upperBound...].split(separator: "\n").prefix(400)
+            .filter { $0.contains("(in VisionCLI)") && !$0.contains("<deduplicated_symbol>") }
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " +!:|0123456789")).components(separatedBy: "  (in").first ?? "" }
+        var seen = Set<String>()
+        let top = frames.filter { seen.insert($0).inserted }.suffix(8)
+        log("watchdog: main thread stuck in: \(top.joined(separator: " ← "))")
     }
 }
 
