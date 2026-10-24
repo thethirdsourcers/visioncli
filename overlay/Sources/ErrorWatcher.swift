@@ -92,7 +92,9 @@ final class ErrorWatcher {
         guard let i = tail.lastIndex(where: { line in
             patterns.contains { $0.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil }
         }) else { return nil }
-        let text = tail[max(0, i - 10)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // From the command that failed (the last prompt line above the error), else the 10 lines before it.
+        let prompt = tail[..<i].lastIndex { l in ["➜ ", "❯ ", "$ ", "% ", "# "].contains { l.contains($0) } }
+        let text = tail[(prompt ?? max(0, i - 10))...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return (tail[i].trimmingCharacters(in: .whitespaces), text)
     }
 }
