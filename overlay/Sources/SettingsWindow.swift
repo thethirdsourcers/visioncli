@@ -177,7 +177,7 @@ struct SettingsSnapshot: Equatable {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, assistant, voice, control, meetings, integrations, advanced
+    case general, assistant, voice, control, meetings, integrations, usage, advanced
     var id: String { rawValue }
 
     var title: String {
@@ -188,6 +188,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .control: return "Computer Control"
         case .meetings: return "Meeting Notes"
         case .integrations: return "Integrations"
+        case .usage: return "Usage"
         case .advanced: return "Advanced"
         }
     }
@@ -200,6 +201,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .control: return "Let the assistant click and type for you, with your approval."
         case .meetings: return "Notes, summaries and suggested replies in your meetings, with a recording to play back."
         case .integrations: return "Connect VisionCLI's tools (look, click, browser…) to your AI command-line tools."
+        case .usage: return "Memory, CPU and disk used by VisionCLI, its voices and speech models."
         case .advanced: return "Permissions, logs and files."
         }
     }
@@ -212,6 +214,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .control: return "cursorarrow.click.2"
         case .meetings: return "person.2.wave.2"
         case .integrations: return "puzzlepiece.extension"
+        case .usage: return "gauge.with.dots.needle.50percent"
         case .advanced: return "wrench.and.screwdriver"
         }
     }
@@ -225,6 +228,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .control: return .blue
         case .meetings: return .orange
         case .integrations: return .green
+        case .usage: return .teal
         case .advanced: return Color(white: 0.45)
         }
     }
@@ -390,6 +394,7 @@ struct SettingsView: View {
         case .control: ControlPage(m: m)
         case .meetings: MeetingsPage(m: m)
         case .integrations: IntegrationsPage(m: m)
+        case .usage: ResourceUsagePage()
         case .advanced: AdvancedPage(m: m)
         }
     }
