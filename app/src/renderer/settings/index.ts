@@ -260,7 +260,8 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
       card(null, "Connecting adds VisionCLI's tools to that CLI for every project. Restart running sessions to load them.", [
         integration("claude", "Install from claude.com/claude-code, then run claude once to sign in."),
         integration("antigravity", "Install Antigravity from antigravity.google, then run agy once to sign in."),
-        integration("gemini", "Install with npm install -g @google/gemini-cli, then run gemini once to sign in."),
+        // Gemini answers through Antigravity; the separate Gemini CLI only shows when it's installed.
+        ...(s.installed.gemini ? [integration("gemini", "")] : []),
       ]),
       card(null, null, [
         row("API keys", "TypeSafe (for Jev instant browser commands) and an optional Gemini API key, kept in integrations.json.", button("Edit API Keys…", () => act("openIntegrations"))),

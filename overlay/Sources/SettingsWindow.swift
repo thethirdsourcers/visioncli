@@ -730,8 +730,11 @@ private struct IntegrationsPage: View {
             integration(.claude, install: "Install from claude.com/claude-code, then run claude once to sign in.")
             Divider()
             integration(.antigravity, install: "Install Antigravity from antigravity.google, then run agy once to sign in.")
-            Divider()
-            integration(.gemini, install: "Install with npm install -g @google/gemini-cli, then run gemini once to sign in.")
+            // Gemini answers through Antigravity; the separate Gemini CLI only shows when it's installed.
+            if m.s.installed[.gemini] == true {
+                Divider()
+                integration(.gemini, install: "")
+            }
         }
         Card {
             Row("API keys", "TypeSafe (for Jev instant browser commands) and an optional Gemini API key, kept in integrations.json.") {
