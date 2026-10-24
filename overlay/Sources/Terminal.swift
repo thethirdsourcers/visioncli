@@ -26,6 +26,11 @@ final class TerminalSession {
     private var lastToolAt = Date()
     private var seenToolIds = Set<String>()
     private var agyDiscover = false   // agy picks its own conversation id: find it by the question text after typing
+    /// Claude Code shows a background agent's transcript in place of the chat while you view it, and what's typed
+    /// then goes to that agent: its file (…/<session>/subagents/agent-*.jsonl) is followed instead.
+    private var agentURL: URL?
+    private var askedAt = Date()
+    private var lastAgentScan = Date.distantPast
 
     var onStatus: (String) -> Void = { _ in }
     var onToolUse: (_ name: String, _ input: [String: Any]) -> Void = { _, _ in }
@@ -174,6 +179,8 @@ final class TerminalSession {
         lastTool = nil
         seenToolIds = []
         agyDiscover = assistant == .antigravity
+        agentURL = nil
+        askedAt = Date()
         skipToEnd()
         startWatching()
         // The assistant the user already runs for this project wins (the most recently active one), like `claude -c`
@@ -522,7 +529,26 @@ final class TerminalSession {
             }
             return
         }
-        guard let url = transcriptURL else { return }
+        guard let main = transcriptURL else { return }
+        // The question hasn't shown up in the chat: it may have gone to a background agent being viewed.
+        if assistant == .claude, agentURL == nil, !seenQuestion, Date().timeIntervalSince(askedAt) > 1.5,
+           Date().timeIntervalSince(lastAgentScan) > 1.5 {
+            lastAgentScan = Date()
+            reading = true
+            reader.async { [weak self] in
+                guard let self else { return }
+                let found = TerminalSession.agentTranscript(of: main, containing: marker)
+                if let found { self.offset = found.offset; self.lines.reset() }
+                DispatchQueue.main.async {
+                    self.reading = false
+                    guard let found, self.awaiting == marker else { return }
+                    self.agentURL = found.url
+                    log("terminal: the question went to a background agent; following \(found.url.lastPathComponent)")
+                }
+            }
+            return
+        }
+        let url = agentURL ?? main
         reading = true
         reader.async { [weak self] in
             guard let self else { return }
@@ -550,6 +576,37 @@ final class TerminalSession {
         return (JSONLines.objects(data, splitter: lines), true)
     }
 
+    /// A background agent of this session whose transcript has the question (written in the last two minutes), and
+    /// where the line with it starts, so following from there sees the question and then the agent's reply.
+    static func agentTranscript(of main: URL, containing marker: String) -> (url: URL, offset: UInt64)? {
+        let dir = main.deletingPathExtension().appendingPathComponent("subagents")
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+        for url in files where url.pathExtension == "jsonl" {
+            guard let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  Date().timeIntervalSince(modified) < 120,
+                  let h = try? FileHandle(forReadingFrom: url) else { continue }
+            defer { try? h.close() }
+            let size = h.seekToEndOfFile()
+            let start = size > 262_144 ? size - 262_144 : 0
+            h.seek(toFileOffset: start)
+            let data = h.readDataToEndOfFile()
+            var lineStart = 0, found: Int?
+            for (i, byte) in data.enumerated() where byte == 10 {
+                let line = data.subdata(in: lineStart..<i)
+                if let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any], obj["type"] as? String == "user",
+                   let message = obj["message"] as? [String: Any] {
+                    let texts = (message["content"] as? String).map { [$0] }
+                        ?? (message["content"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }
+                    if texts.contains(where: { $0.contains(marker) }) { found = lineStart }
+                }
+                lineStart = i + 1
+            }
+            if let found { return (url, start + UInt64(found)) }
+        }
+        return nil
+    }
+
     /// Only what's written after the question matters: skip whatever the conversation has grown by since last time
     /// (in a long session that's megabytes of earlier tool output).
     private func skipToEnd() {
@@ -564,7 +621,7 @@ final class TerminalSession {
     private func handle(_ obj: [String: Any]) {
         if assistant == .gemini { handleGemini(obj); return }
         if assistant == .antigravity { handleAgy(obj); return }
-        guard let marker = awaiting, obj["isSidechain"] as? Bool != true else { return }
+        guard let marker = awaiting, agentURL != nil || obj["isSidechain"] as? Bool != true else { return }
         let message = obj["message"] as? [String: Any] ?? [:]
         switch obj["type"] as? String {
         case "user":
