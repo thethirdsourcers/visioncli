@@ -80,12 +80,12 @@ let lastStateIcon = "";
 function updateAnswer(st: OverlayState) {
   const bubble = root.querySelector<HTMLElement>(".bubble")!;
   bubble.classList.toggle("pinned", st.pinned);
-  const stateIcon = st.phase === "answering" ? "spin" : st.phase === "error" ? "error" : "eye";
+  const stateIcon = st.phase === "answering" ? "spin" : st.phase === "error" ? "error" : "mark";
   if (stateIcon !== lastStateIcon) {
     lastStateIcon = stateIcon;
     const el = root.querySelector<HTMLElement>(".header .state")!;
     el.className = `state ${stateIcon}`;
-    el.innerHTML = stateIcon === "spin" ? spinner(13) : stateIcon === "error" ? icons.warning : icons.eye;
+    el.innerHTML = stateIcon === "spin" ? spinner(13) : stateIcon === "error" ? icons.warning : icons.mark;
   }
   root.querySelector<HTMLElement>(".header .question")!.textContent = st.question;
   const project = root.querySelector<HTMLElement>(".header .project")!;

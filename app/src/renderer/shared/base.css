@@ -22,7 +22,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .spinner::before { background: rgba(255, 255, 255, 0.1); }
 .spinner::after { background: conic-gradient(var(--cyan) 0turn, var(--blue) 0.18turn, var(--purple) 0.36turn, var(--pink) 0.54turn, var(--cyan) 0.72turn, transparent 0.72turn);
   animation: vcli-spin 0.85s linear infinite; }
-.spinner .eye { position: absolute; inset: 0; margin: auto; width: calc(var(--s, 22px) * 0.42); height: calc(var(--s, 22px) * 0.42); color: rgba(255, 255, 255, 0.85); }
+.spinner .mark { position: absolute; inset: 0; margin: auto; width: calc(var(--s, 22px) * 0.5); height: calc(var(--s, 22px) * 0.5); color: rgba(255, 255, 255, 0.85); }
 @keyframes vcli-spin { to { transform: rotate(1turn); } }
 
 /* IconButton: 24×22, white 60 % (95 % hovered), a faint plate on hover, cyan when active. */

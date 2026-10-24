@@ -6,6 +6,9 @@ const stroke = (d: string, w = 2) =>
 const fill = (d: string) => `<svg viewBox="0 0 24 24" fill="currentColor">${d}</svg>`;
 
 export const icons = {
+  // The VisionCLI mark (docs/brand/mark.svg, Views.swift LogoMark): six aperture segments around a pupil, on the
+  // 18-unit grid of the macOS MenuIcon scaled to 24 (ring r 6.1, stroke 2.3, pupil 4.6 across; dashes 42% of a sixth).
+  mark: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.13" fill="none" stroke="currentColor" stroke-width="3.07" stroke-linecap="round" stroke-dasharray="3.58 4.94" transform="rotate(-70 12 12)"/><circle cx="12" cy="12" r="3.07" fill="currentColor"/></svg>',
   // eye.fill
   eye: fill('<path d="M12 4.5C6.6 4.5 2.7 8.6 1.3 11.4a1.4 1.4 0 0 0 0 1.2C2.7 15.4 6.6 19.5 12 19.5s9.3-4.1 10.7-6.9a1.4 1.4 0 0 0 0-1.2C21.3 8.6 17.4 4.5 12 4.5Zm0 12.2a4.7 4.7 0 1 1 0-9.4 4.7 4.7 0 0 1 0 9.4Zm0-7.3a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z"/>'),
   // exclamationmark.triangle.fill
