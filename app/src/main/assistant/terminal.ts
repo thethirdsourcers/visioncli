@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AnswerHandlers, AssistantSession, Question, TerminalContext } from "../contracts";
@@ -66,6 +66,11 @@ export class TerminalSession implements AssistantSession {
   private lastToolAt = 0;
   private seenToolIds = new Set<string>();
   private agyDiscover = false; // agy picks its own conversation id: find it by the question text after typing
+  /** Claude Code shows a background agent's transcript in place of the chat while you view it, and what's typed then
+   *  goes to that agent: its file (…/<session>/subagents/agent-*.jsonl) is followed instead. */
+  private agentFile: string | null = null;
+  private askedAt = 0;
+  private lastAgentScan = 0;
   private finishTimer: NodeJS.Timeout | null = null;
   private geminiFile: string | undefined;
   private cachedFor = "";
@@ -176,6 +181,8 @@ export class TerminalSession implements AssistantSession {
     this.lastTool = null;
     this.seenToolIds = new Set();
     this.agyDiscover = this.cli === "agy";
+    this.agentFile = null;
+    this.askedAt = Date.now();
     this.skipToEnd();
     this.startWatching();
     // The CLI the user already runs for this project wins (the most recently active one), like `claude -c` in that
@@ -500,8 +507,22 @@ export class TerminalSession implements AssistantSession {
       log(`terminal: following agy conversation ${id}`);
       return;
     }
-    const f = this.transcriptPath();
-    if (!f) return;
+    const main = this.transcriptPath();
+    if (!main) return;
+    // The question hasn't shown up in the chat: it may have gone to a background agent being viewed.
+    const now = Date.now();
+    if (this.cli === "claude" && !this.agentFile && !this.seenQuestion && now - this.askedAt > 1500 && now - this.lastAgentScan > 1500) {
+      this.lastAgentScan = now;
+      const found = agentTranscript(main, marker);
+      if (found) {
+        this.agentFile = found.file;
+        this.offset = found.offset;
+        this.lines.reset();
+        log(`terminal: the question went to a background agent; following ${basename(found.file)}`);
+      }
+      return;
+    }
+    const f = this.agentFile ?? main;
     this.reading = true;
     try {
       const read = this.readNewLines(f);
@@ -542,7 +563,7 @@ export class TerminalSession implements AssistantSession {
     if (this.cli === "gemini") return this.handleGemini(o);
     if (this.cli === "agy") return this.handleAgy(o);
     const marker = this.awaiting;
-    if (marker === null || o.isSidechain === true) return;
+    if (marker === null || (o.isSidechain === true && !this.agentFile)) return;
     const message = obj(o.message);
     switch (o.type) {
       case "user": {
@@ -661,4 +682,40 @@ export class TerminalSession implements AssistantSession {
     this.h?.onWaitingInTerminal?.();
     this.lastTool = null;
   }
+}
+
+/** A background agent of this Claude session whose transcript has the question (written in the last two minutes), and
+ *  where the line with it starts, so following from there sees the question and then the agent's reply. */
+export function agentTranscript(main: string, marker: string): { file: string; offset: number } | null {
+  const dir = join(main.replace(/\.jsonl$/, ""), "subagents");
+  let names: string[];
+  try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { return null; }
+  for (const name of names) {
+    const file = join(dir, name);
+    let fd: number;
+    try {
+      if (Date.now() - statSync(file).mtimeMs > 120_000) continue;
+      fd = openSync(file, "r");
+    } catch { continue; }
+    try {
+      const size = fstatSync(fd).size;
+      const start = Math.max(0, size - 262_144);
+      const buf = Buffer.alloc(size - start);
+      readSync(fd, buf, 0, buf.length, start);
+      let lineStart = 0, found = -1;
+      for (let i = buf.indexOf(10); i !== -1; i = buf.indexOf(10, lineStart)) {
+        try {
+          const o = obj(JSON.parse(buf.subarray(lineStart, i).toString("utf8")));
+          const content = obj(o.message).content;
+          const texts = typeof content === "string" ? [content] : arr(content).flatMap((b) => (typeof b.text === "string" ? [b.text] : []));
+          if (o.type === "user" && texts.some((t) => t.includes(marker))) found = lineStart;
+        } catch {}
+        lineStart = i + 1;
+      }
+      if (found >= 0) return { file, offset: start + found };
+    } finally {
+      closeSync(fd);
+    }
+  }
+  return null;
 }

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { AnswerHandlers } from "../../src/main/contracts";
 import { resolveConfig } from "../../src/main/assistant/config";
-import { stableHash, TerminalSession } from "../../src/main/assistant/terminal";
+import { agentTranscript, stableHash, TerminalSession } from "../../src/main/assistant/terminal";
 import { describe, permissionPreview, permissionTitle } from "../../src/main/assistant/describe";
 import { ActivityLog, BufferedActivity } from "../../src/main/terminal/activity";
 import { parseCmdline, parseStat, ttyName } from "../../src/main/terminal/procs";
@@ -271,4 +271,19 @@ test("activity feed: same ANSI layout as macOS", () => {
   assert.equal(out[9], "\x1b[32m   ✓ allowed\x1b[0m");
   assert.equal(out[10], "\x1b[2m   ($0.0123)\x1b[0m");
   assert.equal(out[11], "\x1b[31mError: boom\x1b[0m");
+});
+
+test("a question typed while a background agent is viewed is found in that agent's transcript", () => {
+  const main = join(TEST_HOME, "agent-case", "s1.jsonl");
+  const dir = join(TEST_HOME, "agent-case", "s1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(main, "");
+  const before = JSON.stringify({ type: "assistant", isSidechain: true, message: { content: [{ type: "text", text: "earlier" }] } }) + "\n";
+  const question = JSON.stringify({ type: "user", isSidechain: true, message: { content: "The user sent a new message while you were working:\nLooking at this [voice]" } }) + "\n";
+  writeFileSync(join(dir, "agent-a1.jsonl"), before + question);
+  writeFileSync(join(dir, "agent-a2.jsonl"), before);
+  const found = agentTranscript(main, "Looking at this [voice]");
+  assert.equal(found?.file, join(dir, "agent-a1.jsonl"));
+  assert.equal(found?.offset, Buffer.byteLength(before));
+  assert.equal(agentTranscript(main, "not asked"), null);
 });
