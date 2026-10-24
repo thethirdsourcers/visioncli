@@ -230,11 +230,15 @@ final class ClaudeBackup: ObservableObject {
             if r.0 == 0 || r.0 == 3 { DispatchQueue.main.async { [weak self] in self?.status = "Cleaning up old snapshots…" } }
             // 3 = some files couldn't be read (a conversation being written): the snapshot is still made.
             let ok = r.0 == 0 || r.0 == 3
-            var added = ""
+            var added = "", whole = ""
             if ok, let line = r.1.split(separator: "\n").last(where: { $0.contains("\"summary\"") }),
-               let o = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-               let bytes = o["data_added_packed"] as? Int ?? o["data_added"] as? Int {
-                added = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+               let o = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] {
+                if let bytes = o["data_added_packed"] as? Int ?? o["data_added"] as? Int {
+                    added = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+                }
+                if let total = o["total_bytes_processed"] as? Int, let files = o["total_files_processed"] as? Int {
+                    whole = "\(ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file)), \(files.formatted()) files"
+                }
             }
             if ok { _ = Self.run(repo, ["forget", "--tag", "visioncli", "--keep-daily", "7", "--keep-weekly", "4", "--prune"], password: password) }
             DispatchQueue.main.async {
@@ -244,6 +248,7 @@ final class ClaudeBackup: ObservableObject {
                 if ok {
                     self.lastBackup = Date()
                     log("claude backup: done\(added.isEmpty ? "" : ", \(added) added")")
+                    if !whole.isEmpty { UserDefaults.standard.set(whole, forKey: "claudeBackupWhole") }
                     self.refreshStatus(added: added)
                 } else {
                     log("claude backup failed: \(r.2.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))")
@@ -259,8 +264,10 @@ final class ClaudeBackup: ObservableObject {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
         let when = Date().timeIntervalSince(last) < 60 ? "just now" : f.localizedString(for: last, relativeTo: Date())
-        let new = added.isEmpty ? "" : added == "Zero KB" ? ", nothing new" : ", \(added) new"
-        status = "Last backup \(when)\(new). Keeps 7 daily and 4 weekly snapshots."
+        // Each snapshot is the whole folder; only the changes since the last one are stored again.
+        let whole = UserDefaults.standard.string(forKey: "claudeBackupWhole").map { ": all of ~/.claude (\($0))" } ?? ""
+        let new = added.isEmpty ? "" : added == "Zero KB" ? ", nothing changed since the last one" : ", of which \(added) was new"
+        status = "Last backup \(when)\(whole)\(new). Keeps 7 daily and 4 weekly snapshots."
     }
 
     func showBackups() {
