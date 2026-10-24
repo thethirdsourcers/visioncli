@@ -90,7 +90,7 @@ private final class CloseWatcher: NSObject, NSWindowDelegate {
 // MARK: - Steps and status
 
 enum SetupStep: String, CaseIterable, Identifiable {
-    case welcome, microphone, speech, accessibility, screen, automation, transcription, voice, assistant, done
+    case welcome, microphone, speech, accessibility, screen, automation, transcription, voice, assistant, addons, done
     var id: String { rawValue }
 
     var title: String {
@@ -104,6 +104,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .transcription: return "Speech Model"
         case .voice: return "Voice"
         case .assistant: return "Assistant"
+        case .addons: return "Add-ons"
         case .done: return "All Set"
         }
     }
@@ -119,11 +120,12 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .transcription: return "brain.head.profile"
         case .voice: return "speaker.wave.2.fill"
         case .assistant: return "sparkles"
+        case .addons: return "puzzlepiece.extension.fill"
         case .done: return "checkmark.seal.fill"
         }
     }
 
-    var optional: Bool { [.automation, .voice].contains(self) }
+    var optional: Bool { [.automation, .voice, .addons].contains(self) }
 }
 
 enum StepState { case pending, done, optional }
@@ -237,6 +239,9 @@ final class SetupModel: ObservableObject {
             return .done
         case .voice: return speak ? .done : .optional
         case .assistant: return connected[assistant] == true ? .done : .pending
+        case .addons:
+            let a = AddOns.shared
+            return a.all.allSatisfy { a.installed.contains($0.id) } ? .done : .optional
         case .done: return .pending
         }
     }
@@ -550,6 +555,9 @@ private struct SetupView: View {
                 Text("Also connect the tools to").font(.system(size: 13, weight: .semibold)).padding(.top, 18)
                 ForEach(others, id: \.self) { a in toolsRow(a) }
             }
+        case .addons:
+            header("Add-ons for Claude Code", "Optional plugins that make Claude better at everyday coding. The ticked ones are installed for all your projects; you can change this later in Settings → Integrations.")
+            AddOnsStep()
         case .done:
             header("You're all set", "Hold ⌥ and ask \"what is this?\" while pointing at anything on your screen.")
             let missing = SetupStep.allCases.filter { !$0.optional && $0 != .done && m.state(of: $0) == .pending }
@@ -664,5 +672,24 @@ private struct SetupView: View {
         if name.hasPrefix("large") { return "Most accurate Whisper, slower. Already on your Mac." }
         if name.hasPrefix("medium") { return "More accurate, a bit slower. Already on your Mac." }
         return "Fast and accurate\(name.hasSuffix(".en") ? " (English)" : "")." + " Already on your Mac."
+    }
+}
+
+/// Setup: the recommended add-ons, ticked unless already installed, and one button to install them.
+private struct AddOnsStep: View {
+    @ObservedObject var a = AddOns.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(a.all) { AddOnRow(addOn: $0, checkbox: true) }
+            if !a.claudeInstalled {
+                Text("Install Claude Code first (claude.com/claude-code).").font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 6)
+            } else {
+                let todo = a.selected.subtracting(a.installed)
+                Button(a.installing.isEmpty ? "Install Selected" : "Installing…") { a.installSelected() }
+                    .disabled(todo.isEmpty || !a.installing.isEmpty).controlSize(.large).padding(.top, 10)
+            }
+        }
+        .onAppear { a.refresh(selectMissing: true) }
     }
 }

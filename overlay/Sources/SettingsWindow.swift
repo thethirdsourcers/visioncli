@@ -736,6 +736,13 @@ private struct IntegrationsPage: View {
                 integration(.gemini, install: "")
             }
         }
+        Card("Add-ons for Claude Code", footer: "Installed for all your projects. Restart running Claude sessions to load them.") {
+            ForEach(AddOns.shared.all) { addOn in
+                if addOn.id != AddOns.shared.all.first?.id { Divider() }
+                AddOnRow(addOn: addOn)
+            }
+        }
+        .onAppear { AddOns.shared.refresh() }
         Card {
             Row("API keys", "TypeSafe (for Jev instant browser commands) and an optional Gemini API key, kept in integrations.json.") {
                 Button("Edit API Keys…") { m.hooks.openIntegrations() }
