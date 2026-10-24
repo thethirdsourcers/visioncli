@@ -27,7 +27,7 @@ export interface WindowsOptions {
 }
 
 const SECTIONS: SettingsSection[] = ["general", "assistant", "voice", "control", "meetings", "integrations", "advanced"];
-export const SETUP_STEPS: SetupStepId[] = ["welcome", "microphone", "keyboard", "screen", "control", "terminal", "transcription", "voice", "assistant", "done"];
+export const SETUP_STEPS: SetupStepId[] = ["welcome", "microphone", "keyboard", "screen", "control", "terminal", "transcription", "voice", "assistant", "addons", "done"];
 
 export function createWindowsUI(bridge: WindowsBridge, opts: WindowsOptions = {}): WindowsUI {
   const preload = opts.preload ?? join(__dirname, "preload.js");

@@ -5,6 +5,7 @@ import type {
   PermissionAnswer, Point, Rect, Recorder, SpeechEngine, SpeechEngines, TerminalContext,
 } from "../contracts";
 import type { ControlServer } from "../control";
+import type { AddOns } from "../features/addons";
 import type { AnnounceQueue } from "../features/announce";
 import type { MeetingNotes } from "../features/meeting/notes";
 import type { Autostart } from "../features/autostart";
@@ -59,6 +60,7 @@ export class App {
   installer!: ModelInstaller;
   autostart!: Autostart;
   announcer!: AnnounceQueue;
+  addOns!: AddOns;
   keys!: OverlayKeys;
   /** Created on first use: on Wayland the RemoteDesktop portal asks for consent then. */
   injector: Promise<InputInjector> | null = null;

@@ -131,6 +131,8 @@ export interface SettingsSnapshot {
   pastMeetings: Item[];                // the latest 10, id = folder
   // Integrations
   tools: Record<AssistantId, ToolsStatus>;
+  /** Add-ons for Claude Code (AddOns.swift), in the recommended order. */
+  addOns: { id: string; title: string; detail: string; installed: boolean; installing: boolean; error: string | null }[];
   // Advanced
   desktop: string;                     // "GNOME (Wayland)", "X11 · Openbox"…
   desktopProblem: string | null;       // Desktop.problem()
@@ -187,6 +189,7 @@ export interface SettingsActions {
   checkTools: undefined;               // re-check which CLIs have the tools (slow; updates `tools`)
   connectTools: AssistantId;
   openIntegrations: undefined;
+  installAddOns: string[];             // ids; Claude Code only
   // Advanced
   fixPermissions: undefined;           // forget saved portal consent so the desktop asks again
   openLog: undefined;
@@ -201,7 +204,7 @@ export type SettingsSection = "general" | "assistant" | "voice" | "control" | "m
 
 export type SetupStepId =
   | "welcome" | "microphone" | "keyboard" | "screen" | "control" | "terminal"
-  | "transcription" | "voice" | "assistant" | "done";
+  | "transcription" | "voice" | "assistant" | "addons" | "done";
 
 export interface SetupCheck {
   state: "done" | "pending" | "optional";

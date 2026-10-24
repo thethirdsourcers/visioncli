@@ -144,6 +144,9 @@ App.prototype.settingsSnapshot = function (this: App): SettingsSnapshot {
     }),
     // Integrations
     tools: p.tools,
+    addOns: (this.addOns.refresh(5000), this.addOns.all.map((a) => ({
+      id: a.id, title: a.title, detail: a.detail, installed: this.addOns.installed.has(a.id), installing: this.addOns.installing.has(a.id), error: this.addOns.errors[a.id] ?? null,
+    }))),
     // Advanced
     desktop: this.desktopLabel(),
     desktopProblem: p.desktopProblem,
@@ -204,6 +207,7 @@ App.prototype.settingsAction = async function (this: App, name, value) {
     case "checkTools": await this.checkTools(); break;
     case "connectTools": await this.connectToolsFor(v); break;
     case "openIntegrations": await openIntegrations((f) => this.openWithDefault(f)); break;
+    case "installAddOns": if (this.isInstalled("claude")) for (const id of value as string[]) this.addOns.install(id, this.cfg.claude, this.cfg.path); break;
     // Advanced
     case "fixPermissions": await this.fixPermissions(); break;
     case "openLog": this.openWithDefault(LOG_FILE); break;

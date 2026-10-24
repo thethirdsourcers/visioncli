@@ -265,6 +265,9 @@ const PAGES: Record<SettingsSection, (s: SettingsSnapshot) => Child> = {
         // Gemini answers through Antigravity; the separate Gemini CLI only shows when it's installed.
         ...(s.installed.gemini ? [integration("gemini", "")] : []),
       ]),
+      card("Add-ons for Claude Code", s.installed.claude ? "Installed for all your projects. Restart running Claude sessions to load them." : "Install Claude Code first (claude.com/claude-code).",
+        s.addOns.map((a) => row(a.title, a.error ? `${a.detail} ${a.error}` : a.detail,
+          a.installed ? allowed("Installed") : a.installing ? spinner() : button("Install", () => act("installAddOns", [a.id]), { disabled: !s.installed.claude })))),
       card(null, null, [
         row("API keys", "TypeSafe (for Jev instant browser commands) and an optional Gemini API key, kept in integrations.json.", button("Edit API Keys…", () => act("openIntegrations"))),
       ]),

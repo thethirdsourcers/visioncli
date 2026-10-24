@@ -15,6 +15,7 @@ export const STEPS: StepMeta[] = [
   { id: "transcription", title: "Speech Model", icon: "brain", optional: false, required: false },
   { id: "voice", title: "Voice", icon: "speaker", optional: true, required: false },
   { id: "assistant", title: "Assistant", icon: "sparkles", optional: false, required: false },
+  { id: "addons", title: "Add-ons", icon: "puzzle", optional: true, required: false },
   { id: "done", title: "All Set", icon: "seal", optional: false, required: false },
 ];
 
@@ -35,6 +36,7 @@ export function stateOf(id: SetupStepId, current: SetupStepId, checks: SetupChec
       return "done";
     case "voice": return s.speak ? "done" : "optional";
     case "assistant": return s.tools[s.assistant]?.connected ? "done" : "pending";
+    case "addons": return s.addOns.length && s.addOns.every((a) => a.installed) ? "done" : "optional";
     default: return meta.optional ? "optional" : "pending";
   }
 }

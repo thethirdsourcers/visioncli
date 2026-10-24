@@ -13,6 +13,7 @@ import { createInjector } from "./desktop/input";
 import { createDesktop } from "./desktop/windows";
 import { MeetingNotes } from "./features/meeting/notes";
 import { recoverRecordings } from "./features/meeting/recording";
+import { AddOns } from "./features/addons";
 import { Autostart, launchCommand } from "./features/autostart";
 import type { CrashReporter } from "./features/crashreporter";
 import { CrashWatcher } from "./features/crashwatch";
@@ -152,6 +153,7 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   a.crashWatcher = new CrashWatcher();
   a.autostart = new Autostart({ exec: launchCommand(electron.getAppPath()) });
   a.announcer = a.makeAnnouncer();
+  a.addOns = new AddOns();
 
   // ── Assistant sessions; typing into any terminal by keyboard ──
   a.sessions = createSessions({
@@ -193,6 +195,7 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
     setupFinished: () => log("setup: finished"),
   });
   a.history.on("change", () => a.windows.refreshMenu());
+  a.addOns.onChange = () => a.windows.refreshWindows();
 
   // ── Computer control, crashes ──
   await a.startComputerControl();

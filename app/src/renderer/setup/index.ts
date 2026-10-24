@@ -11,6 +11,8 @@ let checks: SetupChecks = {};
 let s: SettingsSnapshot | null = null;
 let fixing: SetupStepId | null = null;
 let lastJSON = "";
+/** Add-ons ticked in the Add-ons step (null until first shown: then every one not installed yet). */
+let addOnsTicked: Set<string> | null = null;
 
 function apply(r: { checks: SetupChecks; settings: SettingsSnapshot; step?: string }, force = false) {
   checks = r.checks ?? {};
@@ -128,6 +130,7 @@ function page(): Child {
     case "transcription": return transcription();
     case "voice": return voice();
     case "assistant": return assistant();
+    case "addons": return addOns();
     case "done": {
       const left = missing(step, checks, s);
       return [
@@ -221,6 +224,28 @@ function assistant(): Child {
     choice(!snap.terminalMode, "Only in the bubble", "Lighter.", () => act("setTerminalMode", false))));
   if (snap.installed.gemini) {
     out.push(h("h3.sub", null, "Also connect the tools to"), h("div.inline-row", null, h("span", null, "Gemini CLI"), status("gemini")));
+  }
+  return out;
+}
+
+/** The recommended add-ons for Claude Code, ticked unless already installed, and one button to install them. */
+function addOns(): Child {
+  const out: Child[] = [header("Add-ons for Claude Code", "Optional plugins that make Claude better at everyday coding. The ticked ones are installed for all your projects; you can change this later in Settings → Integrations.")];
+  if (!s) return out;
+  const list = s.addOns;
+  const ticked = (addOnsTicked ??= new Set(list.filter((a) => !a.installed).map((a) => a.id)));
+  const claude = s.installed.claude;
+  out.push(h("div.choices", null, list.map((a) => h("label.choice" + (a.installed || !claude ? ".disabled" : ""), null,
+    h("input", { type: "checkbox", style: { marginTop: "3px" }, checked: a.installed || ticked.has(a.id), disabled: a.installed || !claude,
+      onchange: (e: Event) => { if ((e.target as HTMLInputElement).checked) ticked.add(a.id); else ticked.delete(a.id); render(); } }),
+    h("div", null, h("div.choice-title", null, a.title), h("div.choice-detail", null, a.detail),
+      a.error && h("div.status.err", null, a.error)),
+    h("span", { style: { marginLeft: "auto", flex: "none" } }, a.installed ? h("span.status.ok", null, icon("check", 13), "Installed") : a.installing ? spinner() : null)))));
+  if (!claude) out.push(note("Install Claude Code first (claude.com/claude-code)."));
+  else {
+    const todo = list.filter((a) => ticked.has(a.id) && !a.installed).map((a) => a.id);
+    const busy = list.some((a) => a.installing);
+    out.push(h("div.spaced", null, button(busy ? "Installing…" : "Install Selected", () => act("installAddOns", todo), { large: true, primary: true, disabled: !todo.length || busy })));
   }
   return out;
 }
