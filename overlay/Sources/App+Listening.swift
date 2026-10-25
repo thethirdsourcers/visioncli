@@ -129,7 +129,7 @@ extension AppDelegate {
         }
 
         if point {
-            state.status = "Drag around what you mean, or tap \(HotKey.point.shortcut.label) for the whole window…"
+            state.status = "Click or drag around what you mean, or tap \(HotKey.point.shortcut.label) for the whole window…"
             selector.begin { [weak self] rect in
                 guard let self, let rect else { return }
                 self.region = rect

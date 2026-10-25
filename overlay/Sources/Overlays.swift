@@ -174,21 +174,103 @@ final class SelectionPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
+/// The UI element under a point in whatever app owns that spot: a button, card or section, web pages included.
+enum ElementPicker {
+    private static let queue = DispatchQueue(label: "dev.visioncli.picker", qos: .userInteractive)
+    private static var pending: CGPoint?
+    private static var woken = Set<pid_t>()
+
+    /// Calls back on main with the element's frame in top-left points (nil: nothing useful there). Latest point wins.
+    static func element(at p: CGPoint, _ done: @escaping (CGRect?) -> Void) {
+        let busy = pending != nil
+        pending = p
+        guard !busy else { return }
+        queue.async {
+            var r: CGRect?
+            while true {
+                let p: CGPoint? = DispatchQueue.main.sync { let q = pending; pending = nil; return q }
+                guard let p else { break }
+                r = frame(at: p)
+            }
+            DispatchQueue.main.async { done(r) }
+        }
+    }
+
+    private static func frame(at p: CGPoint) -> CGRect? {
+        guard let win = Screen.windows().first(where: { $0.bounds.contains(p) }) else { return nil }
+        let app = AXUIElementCreateApplication(win.pid)
+        AXUIElementSetMessagingTimeout(app, 0.15)
+        if woken.insert(win.pid).inserted {
+            // Chrome/Brave and Electron apps only build the web page's tree when asked to.
+            // (Not for other apps: it slows their window animations.)
+            if ["google chrome", "brave browser", "microsoft edge", "arc", "chromium", "vivaldi", "opera"].contains(win.app.lowercased()) {
+                AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+            }
+            AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        }
+        var hit: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(app, Float(p.x), Float(p.y), &hit) == .success, var el = hit else { return nil }
+        // Climb from bare text and tiny bits to the thing a person would point at (the link, button or card).
+        for _ in 0..<6 {
+            guard let r = rect(of: el) else { return nil }
+            let role = attr(el, kAXRoleAttribute) as? String ?? ""
+            let bare = ["AXStaticText", "AXImage", "AXUnknown", "AXInlineTextBox"].contains(role)
+            if !bare && r.width >= 24 && r.height >= 16 { return r.intersection(win.bounds) }
+            guard let parent = attr(el, kAXParentAttribute) else { return r.intersection(win.bounds) }
+            el = parent as! AXUIElement
+        }
+        return rect(of: el)?.intersection(win.bounds)
+    }
+
+    private static func attr(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
+        var v: CFTypeRef?
+        return AXUIElementCopyAttributeValue(el, name as CFString, &v) == .success ? v : nil
+    }
+
+    private static func rect(of el: AXUIElement) -> CGRect? {
+        var pos = CGPoint.zero, size = CGSize.zero
+        guard let p = attr(el, kAXPositionAttribute), let s = attr(el, kAXSizeAttribute),
+              AXValueGetValue(p as! AXValue, .cgPoint, &pos), AXValueGetValue(s as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0 else { return nil }
+        return CGRect(origin: pos, size: size)
+    }
+}
+
 final class SelectionView: NSView {
     var onDone: (CGRect?) -> Void = { _ in }
     private var start: NSPoint?
     private var current: NSPoint?
+    private var hovered: NSRect? // the element under the pointer, in view coordinates
 
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
+    override func updateTrackingAreas() {
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseMoved(with e: NSEvent) {
+        guard start == nil, let window else { return }
+        let screen = window.convertPoint(toScreen: e.locationInWindow)
+        ElementPicker.element(at: CGPoint(x: screen.x, y: Geometry.primaryHeight - screen.y)) { [weak self] r in
+            guard let self, let window = self.window, self.start == nil else { return }
+            let mine = r.map { window.convertFromScreen(Geometry.toAppKit($0)) }
+            self.hovered = mine
+            self.needsDisplay = true
+        }
+    }
+    override func mouseExited(with e: NSEvent) { hovered = nil; needsDisplay = true }
 
     override func mouseDown(with e: NSEvent) { start = convert(e.locationInWindow, from: nil); current = start; needsDisplay = true }
     override func mouseDragged(with e: NSEvent) { current = convert(e.locationInWindow, from: nil); needsDisplay = true }
     override func mouseUp(with e: NSEvent) {
         current = convert(e.locationInWindow, from: nil)
-        guard let r = selection, r.width > 8, r.height > 8, let window else { onDone(nil); return }
-        onDone(window.convertToScreen(r)) // AppKit global
+        guard let window else { onDone(nil); return }
+        if let r = selection, r.width > 8, r.height > 8 { onDone(window.convertToScreen(r)); return } // AppKit global
+        // A click (no drag) picks the element under the pointer.
+        if let h = hovered { onDone(window.convertToScreen(h)); return }
+        start = nil; current = nil; needsDisplay = true
     }
     override func keyDown(with e: NSEvent) { if e.keyCode == 53 { onDone(nil) } }
 
@@ -199,17 +281,17 @@ final class SelectionView: NSView {
 
     override func draw(_ dirty: NSRect) {
         let path = NSBezierPath(rect: bounds)
-        if let r = selection { path.append(NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)) }
+        if let r = selection ?? hovered { path.append(NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)) }
         path.windingRule = .evenOdd
         NSColor.black.withAlphaComponent(0.28).setFill()
         path.fill()
-        if let r = selection {
+        if let r = selection ?? hovered {
             let border = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
             border.lineWidth = 2
             NSColor.systemCyan.setStroke()
             border.stroke()
         } else {
-            let hint = "Drag around what you mean · keep talking · esc to cancel" as NSString
+            let hint = "Click a part of the screen, or drag around it · keep talking · esc to cancel" as NSString
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15, weight: .medium), .foregroundColor: NSColor.white]
             let size = hint.size(withAttributes: attrs)
             hint.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.maxY - 90), withAttributes: attrs)
