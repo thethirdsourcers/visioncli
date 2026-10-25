@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Bubble
     var startShot: Shot?
     var region: CGRect?
     var pressedAt = Date()
+    var pressedPointer = CGPoint.zero // where the mouse was at the press: moving it while holding means "this box"
     var instructed = Set<String>() // terminal conversations that already got the gemini/agy voice instructions
     var keyPoll: Timer?
     var followTimer: Timer?

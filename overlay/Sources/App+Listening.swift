@@ -47,6 +47,7 @@ extension AppDelegate {
         // The bubble and mascot show at once; the microphone opens on the listener's audio queue meanwhile.
         timed("set(.listening)") { set(.listening) }
         pressedAt = Date()
+        pressedPointer = NSEvent.mouseLocation
         let started = pressedAt
         listener.start { [weak self] error in
             guard let self else { return }
@@ -163,8 +164,12 @@ extension AppDelegate {
         keyPoll = nil
         guard state.phase == .listening else { return }
         // Wispr Flow: letting go always ends the question (Flow has no tap mode here).
-        // Point mode: letting go after holding sends the box under the pointer; with no box, wait for a click or drag.
-        let waitForPick = selector.isActive && region == nil && (selector.hovered == nil || Date().timeIntervalSince(pressedAt) < 0.35)
+        // Point mode: aiming at a box while holding the keys, then letting go, sends that box. Letting go without moving
+        // the mouse keeps the old way: click a box, drag an area, or tap the keys again for the whole window.
+        let m = NSEvent.mouseLocation
+        let aimed = hypot(m.x - pressedPointer.x, m.y - pressedPointer.y) > 20 && Date().timeIntervalSince(pressedAt) >= 0.35
+        let waitForPick = selector.isActive && region == nil && !(aimed && selector.hovered != nil)
+        if selector.isActive, region == nil, aimed, let h = selector.hovered { region = h; log("picker: sending the box under the pointer") }
         if Settings.sttEngine == "external" {
             if waitForPick { return }
             finishListening()
@@ -185,10 +190,7 @@ extension AppDelegate {
         keyPoll = nil
         guard state.phase == .listening else { return }
         if Settings.sttEngine == "external" {
-            if selector.isActive {
-            if region == nil, let h = selector.hovered { region = h; log("picker: sending the box under the pointer") }
-            selector.cancel()
-        }
+            if selector.isActive { selector.cancel() }
             set(.thinking)
             state.status = "Transcribing…"
             var preview = state.question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,10 +209,7 @@ extension AppDelegate {
             }
             return
         }
-        if selector.isActive {
-            if region == nil, let h = selector.hovered { region = h; log("picker: sending the box under the pointer") }
-            selector.cancel()
-        }
+        if selector.isActive { selector.cancel() }
         state.status = "Thinking…"
         set(.thinking)
         let heard = state.question
