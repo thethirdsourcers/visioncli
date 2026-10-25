@@ -163,13 +163,15 @@ extension AppDelegate {
         keyPoll = nil
         guard state.phase == .listening else { return }
         // Wispr Flow: letting go always ends the question (Flow has no tap mode here).
+        // Point mode: letting go after holding sends the box under the pointer; with no box, wait for a click or drag.
+        let waitForPick = selector.isActive && region == nil && (selector.hovered == nil || Date().timeIntervalSince(pressedAt) < 0.35)
         if Settings.sttEngine == "external" {
-            if selector.isActive && region == nil { return }
+            if waitForPick { return }
             finishListening()
             return
         }
         // In point mode, keep listening while the user is still dragging.
-        if selector.isActive && region == nil { return }
+        if waitForPick { return }
         if Date().timeIntervalSince(pressedAt) < 0.35 {
             // Quick tap: keep listening until the next tap.
             if state.question.isEmpty { state.status = "Listening… tap ⌥ to send" }
