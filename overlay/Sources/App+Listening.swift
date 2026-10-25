@@ -183,7 +183,10 @@ extension AppDelegate {
         keyPoll = nil
         guard state.phase == .listening else { return }
         if Settings.sttEngine == "external" {
-            if selector.isActive { selector.cancel() }
+            if selector.isActive {
+            if region == nil, let h = selector.hovered { region = h; log("picker: sending the box under the pointer") }
+            selector.cancel()
+        }
             set(.thinking)
             state.status = "Transcribing…"
             var preview = state.question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -202,7 +205,10 @@ extension AppDelegate {
             }
             return
         }
-        if selector.isActive { selector.cancel() }
+        if selector.isActive {
+            if region == nil, let h = selector.hovered { region = h; log("picker: sending the box under the pointer") }
+            selector.cancel()
+        }
         state.status = "Thinking…"
         set(.thinking)
         let heard = state.question

@@ -209,7 +209,8 @@ enum ElementPicker {
             AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         }
         var hit: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(app, Float(p.x), Float(p.y), &hit) == .success, var el = hit else { return nil }
+        let err = AXUIElementCopyElementAtPosition(app, Float(p.x), Float(p.y), &hit)
+        guard err == .success, var el = hit else { log("picker: no element in \(win.app) (\(err.rawValue))"); return nil }
         // Climb from bare text and tiny bits to the thing a person would point at (the link, button or card).
         for _ in 0..<6 {
             guard let r = rect(of: el) else { return nil }
@@ -241,13 +242,16 @@ final class SelectionView: NSView {
     private var start: NSPoint?
     private var current: NSPoint?
     private var hovered: NSRect? // the element under the pointer, in view coordinates
+    var hoveredOnScreen: NSRect? { hovered.flatMap { h in window.map { $0.convertToScreen(h) } } }
 
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
-    override func updateTrackingAreas() {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
     override func mouseMoved(with e: NSEvent) {
@@ -256,6 +260,7 @@ final class SelectionView: NSView {
         ElementPicker.element(at: CGPoint(x: screen.x, y: Geometry.primaryHeight - screen.y)) { [weak self] r in
             guard let self, let window = self.window, self.start == nil else { return }
             let mine = r.map { window.convertFromScreen(Geometry.toAppKit($0)) }
+            if (mine == nil) != (self.hovered == nil) { log("picker: hover \(mine.map { "\(Int($0.width))x\(Int($0.height))" } ?? "lost")") }
             self.hovered = mine
             self.needsDisplay = true
         }
@@ -266,6 +271,7 @@ final class SelectionView: NSView {
     override func mouseDragged(with e: NSEvent) { current = convert(e.locationInWindow, from: nil); needsDisplay = true }
     override func mouseUp(with e: NSEvent) {
         current = convert(e.locationInWindow, from: nil)
+        log("picker: mouse up, drag \(selection.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none"), hovered \(hovered.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none")")
         guard let window else { onDone(nil); return }
         if let r = selection, r.width > 8, r.height > 8 { onDone(window.convertToScreen(r)); return } // AppKit global
         // A click (no drag) picks the element under the pointer.
@@ -329,6 +335,12 @@ final class RegionSelector {
     }
 
     func cancel() { finish(nil) }
+
+    /// The element box under the pointer right now (top-left points), so letting go without a click still uses it.
+    var hovered: CGRect? {
+        for p in panels { if let v = p.contentView as? SelectionView, let r = v.hoveredOnScreen { return Geometry.toTopLeft(r) } }
+        return nil
+    }
 
     private func finish(_ rect: CGRect?) {
         panels.forEach { $0.orderOut(nil) }
