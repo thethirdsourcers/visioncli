@@ -180,13 +180,15 @@ enum ElementPicker {
     private static var pending: CGPoint?
     private static var woken = Set<pid_t>()
 
-    /// Calls back on main with the element's frame in top-left points (nil: nothing useful there). Latest point wins.
-    static func element(at p: CGPoint, _ done: @escaping (CGRect?) -> Void) {
+    struct Picked { let rect: CGRect; let about: String } // top-left points; "button “Save” #save .btn"
+
+    /// Calls back on main with the element under p (nil: nothing useful there). Latest point wins.
+    static func element(at p: CGPoint, _ done: @escaping (Picked?) -> Void) {
         let busy = pending != nil
         pending = p
         guard !busy else { return }
         queue.async {
-            var r: CGRect?
+            var r: Picked?
             while true {
                 let p: CGPoint? = DispatchQueue.main.sync { let q = pending; pending = nil; return q }
                 guard let p else { break }
@@ -196,7 +198,7 @@ enum ElementPicker {
         }
     }
 
-    private static func frame(at p: CGPoint) -> CGRect? {
+    private static func frame(at p: CGPoint) -> Picked? {
         guard let win = Screen.windows().first(where: { $0.bounds.contains(p) }) else { return nil }
         let app = AXUIElementCreateApplication(win.pid)
         AXUIElementSetMessagingTimeout(app, 0.15)
@@ -216,11 +218,26 @@ enum ElementPicker {
             guard let r = rect(of: el) else { return nil }
             let role = attr(el, kAXRoleAttribute) as? String ?? ""
             let bare = ["AXStaticText", "AXImage", "AXUnknown", "AXInlineTextBox"].contains(role)
-            if !bare && r.width >= 24 && r.height >= 16 { return r.intersection(win.bounds) }
-            guard let parent = attr(el, kAXParentAttribute) else { return r.intersection(win.bounds) }
+            if !bare && r.width >= 24 && r.height >= 16 { break }
+            guard let parent = attr(el, kAXParentAttribute) else { break }
             el = parent as! AXUIElement
         }
-        return rect(of: el)?.intersection(win.bounds)
+        guard let r = rect(of: el) else { return nil }
+        return Picked(rect: r.intersection(win.bounds), about: describe(el))
+    }
+
+    /// What Claude needs to find it in code: kind, visible text, and on web pages the DOM id and classes.
+    private static func describe(_ el: AXUIElement) -> String {
+        func text(_ name: String) -> String? {
+            guard let s = attr(el, name) as? String else { return nil }
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
+            return t.isEmpty ? nil : String(t.prefix(80))
+        }
+        var parts = [text(kAXRoleDescriptionAttribute) ?? text(kAXRoleAttribute) ?? "element"]
+        if let t = text(kAXTitleAttribute) ?? text(kAXDescriptionAttribute) ?? text(kAXValueAttribute) { parts.append("“\(t)”") }
+        if let id = text("AXDOMIdentifier") { parts.append("#" + id) }
+        if let classes = attr(el, "AXDOMClassList") as? [String], !classes.isEmpty { parts.append(classes.prefix(4).map { "." + $0 }.joined()) }
+        return parts.joined(separator: " ")
     }
 
     private static func attr(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
@@ -242,6 +259,8 @@ final class SelectionView: NSView {
     private var start: NSPoint?
     private var current: NSPoint?
     private var hovered: NSRect? // the element under the pointer, in view coordinates
+    var hoveredAbout: String?
+    var onPick: (String?) -> Void = { _ in } // what was picked, just before onDone (nil for a dragged area)
     var hoveredOnScreen: NSRect? { hovered.flatMap { h in window.map { $0.convertToScreen(h) } } }
 
     override var acceptsFirstResponder: Bool { true }
@@ -259,7 +278,8 @@ final class SelectionView: NSView {
         let screen = window.convertPoint(toScreen: e.locationInWindow)
         ElementPicker.element(at: CGPoint(x: screen.x, y: Geometry.primaryHeight - screen.y)) { [weak self] r in
             guard let self, let window = self.window, self.start == nil else { return }
-            let mine = r.map { window.convertFromScreen(Geometry.toAppKit($0)) }
+            let mine = r.map { window.convertFromScreen(Geometry.toAppKit($0.rect)) }
+            self.hoveredAbout = r?.about
             if (mine == nil) != (self.hovered == nil) { log("picker: hover \(mine.map { "\(Int($0.width))x\(Int($0.height))" } ?? "lost")") }
             self.hovered = mine
             self.needsDisplay = true
@@ -273,9 +293,9 @@ final class SelectionView: NSView {
         current = convert(e.locationInWindow, from: nil)
         log("picker: mouse up, drag \(selection.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none"), hovered \(hovered.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none")")
         guard let window else { onDone(nil); return }
-        if let r = selection, r.width > 8, r.height > 8 { onDone(window.convertToScreen(r)); return } // AppKit global
+        if let r = selection, r.width > 8, r.height > 8 { onPick(nil); onDone(window.convertToScreen(r)); return } // AppKit global
         // A click (no drag) picks the element under the pointer.
-        if let h = hovered { onDone(window.convertToScreen(h)); return }
+        if let h = hovered { onPick(hoveredAbout); onDone(window.convertToScreen(h)); return }
         start = nil; current = nil; needsDisplay = true
     }
     override func keyDown(with e: NSEvent) { if e.keyCode == 53 { onDone(nil) } }
@@ -313,6 +333,7 @@ final class RegionSelector {
     /// Calls back with the selected rect in top-left points, or nil if cancelled.
     func begin(_ done: @escaping (CGRect?) -> Void) {
         cancel()
+        picked = nil
         completion = done
         for screen in NSScreen.screens {
             let panel = SelectionPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -321,6 +342,7 @@ final class RegionSelector {
             panel.level = .screenSaver
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let view = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            view.onPick = { [weak self] in self?.picked = $0 }
             view.onDone = { [weak self] rect in self?.finish(rect.map(Geometry.toTopLeft)) }
             panel.contentView = view
             panel.setFrame(screen.frame, display: true)
@@ -338,9 +360,11 @@ final class RegionSelector {
 
     /// The element box under the pointer right now (top-left points), so letting go without a click still uses it.
     var hovered: CGRect? {
-        for p in panels { if let v = p.contentView as? SelectionView, let r = v.hoveredOnScreen { return Geometry.toTopLeft(r) } }
+        for p in panels { if let v = p.contentView as? SelectionView, let r = v.hoveredOnScreen { picked = v.hoveredAbout; return Geometry.toTopLeft(r) } }
         return nil
     }
+    /// The picked element's description, for the question ("button “Save” #save").
+    private(set) var picked: String?
 
     private func finish(_ rect: CGRect?) {
         panels.forEach { $0.orderOut(nil) }

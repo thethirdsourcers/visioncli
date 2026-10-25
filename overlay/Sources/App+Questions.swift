@@ -119,7 +119,7 @@ extension AppDelegate {
     }
 
     func captureAndAsk(_ text: String) {
-        let region = self.region, startShot = self.startShot
+        let region = self.region, startShot = self.startShot, picked = selector.picked
         // Text only: no image tokens. The window's name goes along so the assistant can decide to `look` itself.
         guard withScreen else {
             highlight.hide()
@@ -131,7 +131,10 @@ extension AppDelegate {
             var failure: Error?
             do {
                 if let region {
-                    shots = [try Screen.capture(rect: region)]
+                    // A little margin around a picked element, so Claude sees what's next to it.
+                    var shot = try Screen.capture(rect: picked == nil ? region : region.insetBy(dx: -12, dy: -12))
+                    if let picked { shot.label += ", the user pointed at: \(picked)"; log("picker: pointed at \(picked)") }
+                    shots = [shot]
                 } else if let endWindow = Screen.windowUnderPointer() {
                     let end = try Screen.capture(window: endWindow)
                     // Pointer moved to another window while talking: send both ("compare this with that").
