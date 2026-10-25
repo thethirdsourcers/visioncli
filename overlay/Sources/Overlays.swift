@@ -234,10 +234,26 @@ enum ElementPicker {
             return t.isEmpty ? nil : String(t.prefix(80))
         }
         var parts = [text(kAXRoleDescriptionAttribute) ?? text(kAXRoleAttribute) ?? "element"]
-        if let t = text(kAXTitleAttribute) ?? text(kAXDescriptionAttribute) ?? text(kAXValueAttribute) { parts.append("“\(t)”") }
+        if let t = text(kAXTitleAttribute) ?? text(kAXDescriptionAttribute) ?? text(kAXValueAttribute) ?? innerText(el) { parts.append("“\(t)”") }
         if let id = text("AXDOMIdentifier") { parts.append("#" + id) }
         if let classes = attr(el, "AXDOMClassList") as? [String], !classes.isEmpty { parts.append(classes.prefix(4).map { "." + $0 }.joined()) }
         return parts.joined(separator: " ")
+    }
+
+    /// A web group or card has no title of its own: use the start of the text inside it.
+    private static func innerText(_ el: AXUIElement) -> String? {
+        var out = "", budget = 40
+        func walk(_ e: AXUIElement, _ depth: Int) {
+            guard out.count < 80, budget > 0, depth < 4 else { return }
+            budget -= 1
+            if (attr(e, kAXRoleAttribute) as? String) == "AXStaticText", let v = attr(e, kAXValueAttribute) as? String {
+                out += (out.isEmpty ? "" : " ") + v.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            for c in (attr(e, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { walk(c, depth + 1) }
+        }
+        walk(el, 0)
+        let t = out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : String(t.prefix(80))
     }
 
     private static func attr(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
