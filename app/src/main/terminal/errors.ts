@@ -115,8 +115,11 @@ export class ErrorWatcher {
   private busy = false;
   private seen = new Set<string>();
   private primed = false;
+  private lastPoll = 0;
 
-  constructor(private enabled: () => boolean, private read: () => Promise<Pane[]> = readPanes) {}
+  /** `terminalInFront`: polls every 5 s while it says yes, every 20 s otherwise (each look reads every pane). */
+  constructor(private enabled: () => boolean, private read: () => Promise<Pane[]> = readPanes,
+    private terminalInFront: () => Promise<boolean> = async () => true) {}
 
   start() {
     this.timer ??= setInterval(() => void this.poll(), 5000);
@@ -129,6 +132,8 @@ export class ErrorWatcher {
     if (!this.enabled() || this.busy) return;
     this.busy = true;
     try {
+      if (Date.now() - this.lastPoll < 20_000 && !(await this.terminalInFront().catch(() => false))) return;
+      this.lastPoll = Date.now();
       const found: [string, TerminalError][] = [];
       for (const p of await this.read()) {
         const e = lastError(p.text);

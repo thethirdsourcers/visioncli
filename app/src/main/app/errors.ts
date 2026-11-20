@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { HomeProject } from "../features/home";
+import { isTerminal } from "../features/projects";
 import { log } from "../log";
 import { CACHE } from "../paths";
 import { settings } from "../settings";
@@ -22,7 +23,8 @@ declare module "./core" {
 }
 
 App.prototype.startErrorWatcher = function (this: App) {
-  this.errorWatcher = new ErrorWatcher(() => settings.get("errorWatcher"));
+  this.errorWatcher = new ErrorWatcher(() => settings.get("errorWatcher"), undefined,
+    () => this.desktop.activeWindow().then((w) => !!w && isTerminal(w)));
   this.errorWatcher.onError = (e) => this.offerFix(e);
   this.errorWatcher.start();
 };

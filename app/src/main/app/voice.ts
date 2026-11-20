@@ -165,6 +165,8 @@ App.prototype.wakeVoice = function (this: App) {
 App.prototype.unloadIdleVoice = function (this: App) {
   const u = idleUnload(Date.now() - this.voiceUsedAt, this.speaker.speaking);
   if (u.speech && (this.engine as { isRunning?: boolean } | null)?.isRunning) { log("voice: speech engine idle, unloading"); this.engine!.stop(); }
-  const kokoro = (this.speaker as { kokoro?: { isRunning: boolean; stop(): void } }).kokoro;
-  if (u.voice && kokoro?.isRunning) { log("voice: Kokoro idle, unloading"); kokoro.stop(); }
+  const kokoro = (this.speaker as { kokoro?: { isRunning: boolean; lastUse: number; stop(): void } }).kokoro;
+  // Answers and announcements spoken without a key-down count as use too.
+  const voiceIdle = idleUnload(Date.now() - Math.max(this.voiceUsedAt, kokoro?.lastUse ?? 0), this.speaker.speaking).voice;
+  if (voiceIdle && kokoro?.isRunning) { log("voice: Kokoro idle, unloading"); kokoro.stop(); }
 };

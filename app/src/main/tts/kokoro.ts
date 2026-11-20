@@ -44,8 +44,11 @@ export class KokoroEngine {
   lastError: string | null = null;
 
   get isRunning() { return !!this.proc; }
+  /** Last start or synth (epoch ms): unloaded after 10 idle minutes (App.unloadIdleVoice). */
+  lastUse = 0;
 
   start() {
+    this.lastUse = Date.now();
     if (this.proc) return;
     const uv = VoiceModels.binary("uv"), model = VoiceModels.kokoroModel(), voices = VoiceModels.kokoroVoices(), script = kokoroScript();
     if (!uv || !model || !voices || !script) {
@@ -96,6 +99,7 @@ export class KokoroEngine {
 
   /** Queues text for synthesis; resolves with a WAV file, or null. */
   synth(text: string, voice: string, speed: number): Promise<string | null> {
+    this.lastUse = Date.now();
     if (!this.proc) this.start();
     const p = this.proc;
     if (!p?.stdin?.writable) return Promise.resolve(null);

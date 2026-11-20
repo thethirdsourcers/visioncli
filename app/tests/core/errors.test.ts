@@ -62,3 +62,14 @@ test("ErrorWatcher: errors at launch ignored, each new one offered once, off mea
   await w.poll();
   assert.equal(reads, 3, "nothing read while off");
 });
+
+test("ErrorWatcher: every 20 s unless a terminal is in front", async () => {
+  let front = false, reads = 0;
+  const w = new ErrorWatcher(() => true, async () => { reads++; return []; }, async () => front);
+  await w.poll();
+  await w.poll();
+  assert.equal(reads, 1, "no terminal in front: not again within 20 s");
+  front = true;
+  await w.poll();
+  assert.equal(reads, 2, "terminal in front: every poll");
+});
