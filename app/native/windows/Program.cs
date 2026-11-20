@@ -158,6 +158,7 @@ namespace VcliWin
                 case "setValue": return Uia.Run(() => Uia.SetValue(a.Int("id"), a.Str("text", "")));
                 case "isSecure": return Uia.Run(() => Uia.IsSecure(a));
                 case "windowText": return Uia.Run(() => Uia.WindowText(a.Int("max", 4000), a.Int("excludePid")));
+                case "elementAt": return Uia.Run(() => Uia.ElementAt(Desktop.ParseHwnd(a.Need("hwnd")), a.Num("x"), a.Num("y")));
 
                 // ── Audio ──
                 case "audioDevices": return Audio.Devices();

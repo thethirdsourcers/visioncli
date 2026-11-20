@@ -11,7 +11,7 @@ import { settings } from "../settings";
 import { assistantName, cliFor } from "../terminal/transcripts";
 import { App } from "./core";
 import { runJson, runText } from "./node";
-import { drawMarks, makeShot, rawWindowUnderPointer, regionLabel, sameWindow, windowLabel, windowUnderPointer, type Shot } from "./shots";
+import { drawMarks, grow, makeShot, rawWindowUnderPointer, regionLabel, sameWindow, windowLabel, windowUnderPointer, type Shot } from "./shots";
 import { carryOver, HIDE, hudTitle, terminalQuestion, voiceQuestion } from "./text";
 
 // From a transcript to an answer (App+Questions.swift): quick commands (Jev), smart routing, screenshots, sending,
@@ -118,7 +118,7 @@ App.prototype.warmQuick = function (this: App) {
 };
 
 App.prototype.captureAndAsk = async function (this: App, text: string) {
-  const region = this.region, startShot = this.startShot;
+  const region = this.region, startShot = this.startShot, picked = this.picked;
   const [windows, p] = await Promise.all([this.desktop.windows().catch(() => [] as DesktopWindow[]), this.pointer()]);
   // Text only: no image tokens. The window's name goes along so the assistant can decide to `look` itself.
   if (!this.withScreen) {
@@ -130,8 +130,12 @@ App.prototype.captureAndAsk = async function (this: App, text: string) {
   let failure: unknown = null;
   try {
     if (region) {
-      const jpeg = await this.ui.hiddenDuring(() => this.desktop.captureRect(region));
-      shots = [makeShot(jpeg, region, regionLabel(windows, region), p)];
+      // A little margin around a picked element, so the assistant sees what's next to it.
+      const c = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
+      const display = picked ? (await this.desktop.displays()).find((d) => c.x >= d.x && c.y >= d.y && c.x < d.x + d.width && c.y < d.y + d.height) : undefined;
+      const rect = picked ? grow(region, 12, display) : region;
+      const jpeg = await this.ui.hiddenDuring(() => this.desktop.captureRect(rect));
+      shots = [makeShot(jpeg, rect, regionLabel(windows, rect) + (picked ? `, the user pointed at: ${picked}` : ""), p)];
     } else {
       const end = windowUnderPointer(windows, p);
       if (end) {

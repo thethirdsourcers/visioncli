@@ -49,6 +49,7 @@ export function fakes() {
     setValue: async (id, t) => { calls.push(`setValue ${id} ${t}`); return true; },
     isSecure: async (t) => (t.id != null && state.secureIds.has(t.id)) || (!!t.focused && state.secureFocused),
     windowText: async () => state.text,
+    elementAt: async () => null,
   };
   const apps: Apps = {
     list: async () => [],

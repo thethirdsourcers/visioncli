@@ -1,7 +1,7 @@
 import { meaningful, cleanTranscript } from "./text";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import type { HotkeyEvent } from "../contracts";
+import type { HotkeyEvent, Point } from "../contracts";
 import { ProjectSelector } from "../core/projects";
 import { HomeProject } from "../features/home";
 import { isTerminal } from "../features/projects";
@@ -21,6 +21,13 @@ import { makeShot, rawWindowUnderPointer, windowLabel, windowUnderPointer } from
 const TAP_MS = 350;
 const MAX_LISTEN_MS = 90_000;
 const CAPTION_MS = 800;
+
+/** Point mode, keys let go: after aiming at a box with the mouse while holding them (moved over 20 px, not a tap), that
+ *  box is the answer; otherwise null (keep waiting for a click, a drag, or another tap for the whole window). */
+export function aimedPick<T extends { at: Point }>(heldMs: number, pressed: Point | null, hovered: T | null): T | null {
+  if (!hovered || !pressed || heldMs < TAP_MS) return null;
+  return Math.hypot(hovered.at.x - pressed.x, hovered.at.y - pressed.y) > 20 ? hovered : null;
+}
 
 declare module "./core" {
   interface App {
@@ -101,6 +108,8 @@ App.prototype.startListening = function (this: App, point: boolean, screen = fal
   s.approval = undefined;
   this.startShot = null;
   this.region = null;
+  this.picked = null;
+  this.pressedPointer = null;
   this.heard = "";
   this.pointMode = point;
   this.keysHeld = true;
@@ -143,9 +152,11 @@ App.prototype.startListening = function (this: App, point: boolean, screen = fal
   this.terminalContext = null;
   this.terminalProject = null;
   this.existingClaude = null;
+  const atPress = Promise.all([this.desktop.windows().catch(() => []), this.pointer()]);
   void (async () => {
-    const [windows, p] = await Promise.all([this.desktop.windows().catch(() => []), this.pointer()]);
+    const [windows, p] = await atPress;
     if (!thisPress()) return;
+    this.pressedPointer = p;
     const window = windowUnderPointer(windows, p);
     // Screenshot questions: dim everything but the window that will be captured (point mode has its own dimming).
     if (this.withScreen && !point && window && this.state.phase === "listening") this.ui.spotlight(window.bounds);
@@ -189,10 +200,13 @@ App.prototype.startListening = function (this: App, point: boolean, screen = fal
   })();
 
   if (point) {
-    this.state.status = `Drag around what you mean, or tap ${this.shortcutLabels().point} for the whole window…`;
-    void this.ui.selectRegion().then((rect) => {
-      if (!rect || this.pressedAt !== started) return;
+    this.state.status = `Click or drag around what you mean, or tap ${this.shortcutLabels().point} for the whole window…`;
+    // The element under the mouse, in the window there (listed at the press, so never the selection overlay).
+    void this.ui.selectRegion(async (p) => this.ax.elementAt(p, rawWindowUnderPointer((await atPress)[0], p))).then((sel) => {
+      if (!sel || this.pressedAt !== started) return;
+      const rect = sel.rect;
       this.region = rect;
+      this.picked = sel.about ?? null;
       this.state.status = "";
       this.ui.showMarks([{ kind: "box", rect, label: "" }], 0, { dashed: true, persistent: true });
       // Keys already released while dragging (hold mode): send now.
@@ -209,6 +223,10 @@ App.prototype.startListening = function (this: App, point: boolean, screen = fal
 App.prototype.keysReleased = function (this: App) {
   this.keysHeld = false;
   if (this.state.phase !== "listening") return;
+  // Point mode: aiming at a box while holding the keys, then letting go, sends that box. Letting go without moving the
+  // mouse keeps the old way: click a box, drag an area, or tap the keys again for the whole window.
+  const aimed = this.pointMode && this.region == null ? aimedPick(Date.now() - this.pressedAt, this.pressedPointer, this.ui.hoveredElement()) : null;
+  if (aimed) { this.region = aimed.rect; this.picked = aimed.about; }
   // In point mode, keep listening while the user is still dragging.
   if (this.pointMode && this.region == null) return;
   if (Date.now() - this.pressedAt < TAP_MS) {

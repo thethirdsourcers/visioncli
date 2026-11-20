@@ -1,4 +1,4 @@
-import type { Accessibility, Point, UIElement } from "../../contracts";
+import type { Accessibility, DesktopWindow, PickedElement, Point, UIElement } from "../../contracts";
 import { log } from "../../log";
 import { type WinHelper, winHelper } from "../windows/win32";
 
@@ -42,6 +42,12 @@ export class Uia implements Accessibility {
       if (target.focused) return await this.helper.call("isSecure", { focused: true });
     } catch (e) { log(`uia isSecure: ${(e as Error).message}`); }
     return false;
+  }
+
+  async elementAt(p: Point, window: DesktopWindow | null): Promise<PickedElement | null> {
+    if (!window) return null;
+    const r = await this.helper.call("elementAt", { hwnd: window.id, x: Math.round(p.x), y: Math.round(p.y) }).catch(() => null);
+    return r && { rect: { x: r.x, y: r.y, width: r.w, height: r.h }, about: r.about };
   }
 
   async windowText(max: number): Promise<{ app: string; title: string; text: string } | null> {

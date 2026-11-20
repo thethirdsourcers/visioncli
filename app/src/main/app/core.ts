@@ -106,7 +106,9 @@ export class App {
   // ── This press ──
   startShot: Shot | null = null;
   region: Rect | null = null;
+  picked: string | null = null; // the element picked in point mode ("button “Save” #save"), for the question
   pressedAt = 0;
+  pressedPointer: Point | null = null; // where the mouse was at the press: moving it while holding means "this box"
   /** The keys of this press are still down (point mode waits for the drag while they are). */
   keysHeld = false;
   pointMode = false;

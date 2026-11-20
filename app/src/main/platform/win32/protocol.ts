@@ -61,6 +61,8 @@ export interface Methods {
   setValue: { params: { id: number; text: string }; result: boolean }; // ValuePattern
   isSecure: { params: { id?: number; x?: number; y?: number; focused?: boolean }; result: boolean }; // IsPassword
   windowText: { params: { max: number; excludePid?: number }; result: { app: string; title: string; text: string } | null };
+  /** Point mode: the element a person would point at under (x, y) in that window, and what it is (DOM id/classes on web pages). */
+  elementAt: { params: { hwnd: string; x: number; y: number }; result: { x: number; y: number; w: number; h: number; about: string } | null };
 
   // ── Audio (waveIn / waveOut, 16 kHz mono 16-bit) ──
   audioDevices: { params: {}; result: { inputs: { id: string; name: string; isDefault: boolean }[]; outputs: { id: string; name: string; isDefault: boolean }[] } };

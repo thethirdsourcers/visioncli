@@ -197,7 +197,13 @@ export interface Accessibility {
   isSecure(target: { id?: number; at?: Point; focused?: boolean }): Promise<boolean>;
   /** Visible text of the front window, max `max` chars, never from password fields. */
   windowText(max: number): Promise<{ app: string; title: string; text: string } | null>;
+  /** The element a person would point at under `p` (point mode), in `window` (the one under the pointer, never ours). */
+  elementAt(p: Point, window: DesktopWindow | null): Promise<PickedElement | null>;
 }
+
+/** A UI element picked in point mode: its frame (global pixels) and what it is, for the assistant to find it in code
+ *  (`button “Save” #save .btn`). */
+export interface PickedElement { rect: Rect; about: string }
 
 export interface Apps {
   /** Installed apps from .desktop files. */

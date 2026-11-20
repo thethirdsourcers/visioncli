@@ -4,7 +4,7 @@
 
 import { screen } from "electron";
 import { execFile } from "node:child_process";
-import type { BubbleAction, Mark, OverlayState, Point, Rect, TaskStep } from "../../contracts";
+import type { BubbleAction, Mark, OverlayState, PickedElement, Point, Rect, TaskStep } from "../../contracts";
 import { log } from "../../log";
 import {
   type DisplayInfo, type Size, contains, displayForDip, displayForPixel, localDipToPixels, marksByDisplay, placeBadge,
@@ -26,8 +26,11 @@ export interface OverlayUI {
    *  draws dashed boxes (a selected area); `persistent` keeps them until hideMarks(). */
   showMarks(marks: Mark[], durationMs: number, opts?: { dashed?: boolean; persistent?: boolean }): void;
   hideMarks(): void;
-  /** Drag-to-select on every display; resolves with the rect in global pixels, or null (esc / right click / tiny). */
-  selectRegion(): Promise<Rect | null>;
+  /** Drag-to-select on every display, or click the element boxed under the mouse (`elementAt`, global pixels). Resolves
+   *  with the rect in global pixels and, for a picked element, what it is; null for esc / right click. */
+  selectRegion(elementAt?: (p: Point) => Promise<PickedElement | null>): Promise<{ rect: Rect; about?: string } | null>;
+  /** The element boxed under the mouse right now, and where the mouse was (global pixels). */
+  hoveredElement(): (PickedElement & { at: Point }) | null;
   cancelRegion(): void;
   /** Dims the pointer's display except `hole` (global pixels); null hides it. Call again to move the hole. */
   spotlight(hole: Rect | null): void;
@@ -207,22 +210,42 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
 
   // One selector window per display, kept and reused so the next selection opens instantly.
   const regionWindows = new Map<number, OverlayWindow>();
-  let region: { finish: (r: Rect | null) => void } | null = null;
+  let region: { finish: (r: Rect | null, about?: string) => void } | null = null;
+  let hovered: (PickedElement & { at: Point }) | null = null;
 
-  function selectRegion(): Promise<Rect | null> {
+  function selectRegion(elementAt?: (p: Point) => Promise<PickedElement | null>): Promise<{ rect: Rect; about?: string } | null> {
     region?.finish(null);
     return new Promise((resolve) => {
       const displays = displaysNow();
       for (const [id, w] of regionWindows) if (!displays.some((d) => d.id === id)) { w.destroy(); regionWindows.delete(id); }
       const me = {
-        finish: (r: Rect | null) => {
+        finish: (r: Rect | null, about?: string) => {
           if (region !== me) return;
           region = null;
+          hovered = null;
           for (const w of regionWindows.values()) w.hide();
-          resolve(r);
+          resolve(r ? { rect: r, about } : null);
         },
       };
       region = me;
+      hovered = null;
+      // The element under the mouse, one hit test at a time (they run in other processes): the latest point wins.
+      let pending: Point | null = null, busy = false;
+      const hover = async (p: Point) => {
+        pending = p;
+        if (busy || !elementAt) return;
+        busy = true;
+        while (pending && region === me) {
+          const at: Point = pending;
+          pending = null;
+          const el = await elementAt(at).catch(() => null);
+          if (region === me) hovered = el && { ...el, at };
+        }
+        busy = false;
+        if (region !== me) return;
+        const r = hovered && toDipRect(hovered.rect, displays);
+        for (const d of displays) regionWindows.get(d.id)?.send("region:box", r && { ...r, x: r.x - d.bounds.x, y: r.y - d.bounds.y });
+      };
       const under = displayForDip(pointer(), displays);
       for (const d of displays) {
         let w = regionWindows.get(d.id);
@@ -231,6 +254,8 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
           regionWindows.set(d.id, w);
         }
         w.on("region:done", (r: Rect | null) => me.finish(r ? localDipToPixels(r, d) : null));
+        w.on("region:hover", (p: Point) => void hover(localDipToPixels({ ...p, width: 0, height: 0 }, d)));
+        w.on("region:pick", () => { if (hovered) me.finish(hovered.rect, hovered.about); });
         w.send("region:reset");
         w.setBounds(d.bounds);
         w.show();
@@ -385,6 +410,7 @@ export function createOverlayUI(opts: OverlayOptions = {}): OverlayUI {
     hideMarks,
     selectRegion,
     cancelRegion() { region?.finish(null); },
+    hoveredElement: () => hovered,
     spotlight,
     badge,
     controlGlow,

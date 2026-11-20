@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -224,6 +225,84 @@ namespace VcliWin
             }
             catch (Exception ex) { Log.Write("uia isSecure: " + ex.Message); }
             return false;
+        }
+
+        /// <summary>The element a person would point at under (x, y) in window hwnd (point mode): down the ControlView to
+        /// the deepest child under the point (FromPoint would hit VisionCLI's own overlay), then up from bare text and tiny
+        /// bits to the link, button or card. Its frame and what it is ("button “Save” #save .btn"), or null.</summary>
+        public static Dictionary<string, object> ElementAt(IntPtr hwnd, double x, double y)
+        {
+            var cache = Cache();
+            cache.Add(AutomationElement.LocalizedControlTypeProperty);
+            cache.Add(AutomationElement.ClassNameProperty);
+            cache.Add(AutomationElement.FrameworkIdProperty);
+            var walker = TreeWalker.ControlViewWalker;
+            var pt = new System.Windows.Point(x, y);
+            var sw = Stopwatch.StartNew();
+            System.Windows.Rect Frame(AutomationElement e) => Get(e, AutomationElement.BoundingRectangleProperty) is System.Windows.Rect r ? r : System.Windows.Rect.Empty;
+            using (cache.Activate())
+            {
+                var win = AutomationElement.FromHandle(hwnd);
+                var el = win;
+                for (int depth = 0; depth < MaxDepth && sw.ElapsedMilliseconds < 300; depth++)
+                {
+                    AutomationElement hit = null;
+                    for (var c = walker.GetFirstChild(el, cache); c != null && sw.ElapsedMilliseconds < 300; c = walker.GetNextSibling(c, cache))
+                        if (!Flag(c, AutomationElement.IsOffscreenProperty) && Frame(c).Contains(pt)) hit = c; // later siblings are on top
+                    if (hit == null) break;
+                    el = hit;
+                }
+                for (int i = 0; i < 6; i++)
+                {
+                    var r = Frame(el);
+                    if (!Context.Contains(Role(el)) && r.Width >= 24 && r.Height >= 16) break;
+                    var parent = walker.GetParent(el, cache);
+                    if (parent == null) break;
+                    el = parent;
+                }
+                var f = Frame(el);
+                f.Intersect(Frame(win));
+                if (f.IsEmpty || f.Width < 1 || f.Height < 1) return null;
+                return Json.O("x", (int)Math.Round(f.X), "y", (int)Math.Round(f.Y), "w", (int)Math.Round(f.Width), "h", (int)Math.Round(f.Height), "about", Describe(el, walker, cache));
+            }
+        }
+
+        /// <summary>What the assistant needs to find it in code: kind, visible text, and on web pages the DOM id and classes.</summary>
+        static string Describe(AutomationElement e, TreeWalker walker, CacheRequest cache)
+        {
+            var parts = new List<string> { Clean(Text(e, AutomationElement.LocalizedControlTypeProperty)) is var kind && kind != "" ? kind : "element" };
+            bool secure = Flag(e, AutomationElement.IsPasswordProperty);
+            string t = Clean(Text(e, AutomationElement.NameProperty), 80);
+            if (t == "") t = Clean(Text(e, AutomationElement.HelpTextProperty), 80);
+            if (t == "" && !secure && Editable.Contains(Role(e))) t = Clean(Text(e, ValuePattern.ValueProperty), 80);
+            if (t == "" && !secure) t = InnerText(e, walker, cache);
+            if (t != "") parts.Add("“" + t + "”");
+            // Chromium maps the DOM id to AutomationId and the class attribute to ClassName; native ones are noise.
+            if (Text(e, AutomationElement.FrameworkIdProperty) == "Chrome")
+            {
+                var id = Text(e, AutomationElement.AutomationIdProperty).Trim();
+                if (id != "") parts.Add("#" + id);
+                var classes = Text(e, AutomationElement.ClassNameProperty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (classes.Length > 0) parts.Add(string.Concat(classes.Take(4).Select(c => "." + c)));
+            }
+            return string.Join(" ", parts);
+        }
+
+        /// <summary>A web group or card has no name of its own: the start of the text inside it.</summary>
+        static string InnerText(AutomationElement root, TreeWalker walker, CacheRequest cache)
+        {
+            var sb = new StringBuilder();
+            int budget = 40;
+            void Go(AutomationElement e, int depth)
+            {
+                if (sb.Length >= 80 || budget <= 0 || depth >= 4) return;
+                budget--;
+                if (Flag(e, AutomationElement.IsPasswordProperty)) return;
+                if (depth > 0 && Role(e) == "Text") { var s = Text(e, AutomationElement.NameProperty).Trim(); if (s != "") sb.Append(sb.Length > 0 ? " " : "").Append(s); }
+                for (var c = walker.GetFirstChild(e, cache); c != null && sb.Length < 80 && budget > 0; c = walker.GetNextSibling(c, cache)) Go(c, depth + 1);
+            }
+            try { Go(root, 0); } catch { }
+            return Clean(sb.ToString(), 80);
         }
 
         static readonly HashSet<string> NameIsText = new HashSet<string> { "Text", "Hyperlink", "ListItem", "TreeItem", "DataItem", "HeaderItem" };

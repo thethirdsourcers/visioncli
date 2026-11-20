@@ -70,4 +70,14 @@ export function regionLabel(windows: DesktopWindow[], r: Rect): string {
   return "Selected area of " + (w ? windowLabel(w) : "Screen");
 }
 
+/** `r` grown by `by` on every side, kept inside `bounds` (a picked element's margin, within its display). */
+export function grow(r: Rect, by: number, bounds?: Rect): Rect {
+  let x1 = r.x - by, y1 = r.y - by, x2 = r.x + r.width + by, y2 = r.y + r.height + by;
+  if (bounds) {
+    x1 = Math.max(x1, bounds.x); y1 = Math.max(y1, bounds.y);
+    x2 = Math.min(x2, bounds.x + bounds.width); y2 = Math.min(y2, bounds.y + bounds.height);
+  }
+  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
 export function sameWindow(a?: DesktopWindow, b?: DesktopWindow) { return !!a && !!b && a.id === b.id; }

@@ -6,7 +6,8 @@ import { mkdtempSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { compareVersions, electronNodeWrapper, findNode, loadConfig, mergePath, parseArgs, registryPath, serverArgs } from "../../src/main/app/config";
-import { drawMarks, makeShot, rawWindowUnderPointer, regionLabel, screenPoint, windowLabel, windowUnderPointer } from "../../src/main/app/shots";
+import { drawMarks, grow, makeShot, rawWindowUnderPointer, regionLabel, screenPoint, windowLabel, windowUnderPointer } from "../../src/main/app/shots";
+import { aimedPick } from "../../src/main/app/listening";
 import { carryOver, cleanTranscript, hudTitle, meaningful, parseOpenLink, terminalQuestion, voiceQuestion } from "../../src/main/app/text";
 import { OverlayKeys } from "../../src/main/app/keys";
 import { idleUnload } from "../../src/main/app/voice";
@@ -88,6 +89,9 @@ test("windows under the pointer skip terminals", () => {
   assert.equal(windowLabel(wins[2]), "Firefox");
   assert.equal(regionLabel(wins, { x: 1100, y: 10, width: 5, height: 5 }), "Selected area of Firefox");
   assert.equal(regionLabel([], { x: 0, y: 0, width: 5, height: 5 }), "Selected area of Screen");
+  // A picked element's 12 px margin stays on its display.
+  assert.deepEqual(grow({ x: 5, y: 100, width: 50, height: 20 }, 12, { x: 0, y: 0, width: 1920, height: 1080 }), { x: 0, y: 88, width: 67, height: 44 });
+  assert.deepEqual(grow({ x: 100, y: 100, width: 10, height: 10 }, 12), { x: 88, y: 88, width: 34, height: 34 });
 });
 
 test("question text: bubble and terminal tags", () => {
@@ -199,4 +203,13 @@ test("the saved PATH is merged with this launch's (CLIs installed after the firs
   assert.equal(mergePath("C:\\Windows;C:\\Tools", "c:\\tools;C:\\Users\\me\\AppData\\Local\\agy\\bin", "win32"),
     "C:\\Windows;C:\\Tools;C:\\Users\\me\\AppData\\Local\\agy\\bin");
   assert.equal(mergePath(null, "/bin", "linux"), "/bin");
+});
+
+test("aimedPick: letting go sends the box only after holding and moving the mouse over 20 px", () => {
+  const box = { rect: { x: 0, y: 0, width: 50, height: 20 }, about: "button", at: { x: 130, y: 100 } };
+  assert.equal(aimedPick(800, { x: 100, y: 100 }, box), box);
+  assert.equal(aimedPick(200, { x: 100, y: 100 }, box), null);                 // a tap: wait for the next tap
+  assert.equal(aimedPick(800, { x: 115, y: 100 }, box), null);                 // didn't aim: click, drag or tap
+  assert.equal(aimedPick(800, { x: 100, y: 100 }, null), null);                // nothing boxed
+  assert.equal(aimedPick(800, null, box), null);
 });

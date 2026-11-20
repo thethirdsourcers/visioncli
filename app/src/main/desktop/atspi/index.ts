@@ -1,6 +1,7 @@
-import type { Accessibility, Point, Rect, UIElement } from "../../contracts";
+import type { Accessibility, DesktopWindow, PickedElement, Point, Rect, UIElement } from "../../contracts";
 import { log } from "../../log";
 import { createUiaAccessibility } from "../uia";
+import { ownPids } from "../windows/common";
 import { type Bus, Variant, call, connect, getProp, setProp } from "./dbus";
 
 // The front app's UI through AT-SPI2 (UIElements in Control.swift): the same walk limits (depth 30, 350 items, 5000
@@ -15,6 +16,9 @@ const EDITABLE = "org.a11y.atspi.EditableText";
 const ROOT: Ref = ["org.a11y.atspi.Registry", "/org/a11y/atspi/accessible/root"];
 const NULL_PATH = "/org/a11y/atspi/null";
 const T = 500; // per-call timeout, like AXUIElementSetMessagingTimeout(…, 0.5)
+
+// Bare text and pictures: point mode climbs from these to the link, button or card around them.
+const BARE = new Set(["static", "label", "image", "icon", "unknown", ""]);
 
 // AtspiStateType bits (GetState returns two 32-bit words).
 const ACTIVE = 1, FOCUSED = 12, SHOWING = 25, SINGLE_LINE = 26;
@@ -243,9 +247,11 @@ class Atspi implements Accessibility {
     return false;
   }
 
-  /** The deepest element at a screen point: in the window there (the active one first), then GetAccessibleAtPoint down. */
-  private async roleAt(p: Point): Promise<string> {
+  /** The deepest element at a screen point: in the window there (`pid`'s, else the active one first; never ours), then
+   *  GetAccessibleAtPoint down. With the window's offset and frame. */
+  private async refAt(p: Point, pid?: number): Promise<{ ref: Ref; off: Point; window: Rect } | null> {
     const apps = await this.apps();
+    const own = ownPids();
     const wins = apps.flatMap((a) => a.windows.filter((w) => hasState(w.state, SHOWING)).map((w) => ({ a, w })))
       .sort((x, y) => Number(hasState(y.w.state, ACTIVE)) - Number(hasState(x.w.state, ACTIVE)));
     for (const { a, w } of wins) {
@@ -253,15 +259,78 @@ class Atspi implements Accessibility {
       const f = await this.extents(w.ref);
       const x = p.x - off.x, y = p.y - off.y;
       if (!f || x < f.x || y < f.y || x >= f.x + f.width || y >= f.y + f.height) continue;
+      const appPid = await this.pid(a.app[0]);
+      if (appPid !== undefined && (pid !== undefined ? appPid !== pid : own.has(appPid))) continue;
       let ref: Ref = w.ref;
       for (let depth = 0; depth < 30; depth++) {
         const next = await this.q<Ref>(ref, COMPONENT, "GetAccessibleAtPoint", "iiu", [Math.round(x), Math.round(y), 0]).catch(() => null);
         if (!next || next[1] === NULL_PATH || (next[0] === ref[0] && next[1] === ref[1])) break;
         ref = next;
       }
-      return this.role(ref);
+      return { ref, off, window: { x: f.x + off.x, y: f.y + off.y, width: f.width, height: f.height } };
     }
-    return "";
+    return null;
+  }
+
+  private async roleAt(p: Point): Promise<string> {
+    const hit = await this.refAt(p);
+    return hit ? this.role(hit.ref) : "";
+  }
+
+  async elementAt(p: Point, window: DesktopWindow | null): Promise<PickedElement | null> {
+    try {
+      await this.a11y();
+      const hit = await this.refAt(p, window?.pid);
+      if (!hit) return null;
+      // Climb from bare text and tiny bits to the thing a person would point at (the link, button or card).
+      let ref = hit.ref, role = await this.role(ref), f = await this.extents(ref);
+      for (let i = 0; i < 6 && f; i++) {
+        if (!BARE.has(role) && f.width >= 24 && f.height >= 16) break;
+        const parent = await this.prop<Ref>(ref, ACC, "Parent").catch(() => null);
+        const pf = parent && parent[1] !== NULL_PATH ? await this.extents(parent) : null;
+        if (!parent || !pf) break;
+        ref = parent; role = await this.role(ref); f = pf;
+      }
+      if (!f) return null;
+      const w = hit.window, x = Math.max(f.x + hit.off.x, w.x), y = Math.max(f.y + hit.off.y, w.y);
+      const width = Math.min(f.x + hit.off.x + f.width, w.x + w.width) - x, height = Math.min(f.y + hit.off.y + f.height, w.y + w.height) - y;
+      if (width < 1 || height < 1) return null;
+      return { rect: { x, y, width, height }, about: await this.describe(ref, role) };
+    } catch (e) {
+      log(`atspi elementAt: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /** What the assistant needs to find it in code: kind, visible text, and on web pages the DOM id and classes. */
+  private async describe(ref: Ref, role: string): Promise<string> {
+    const clip = (s: string) => s.replace(/\uFFFC/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const secure = role === "password text";
+    let text = clip(await this.name(ref)) || clip(await this.prop<string>(ref, ACC, "Description").catch(() => ""));
+    if (!text && !secure) text = clip(await this.text(ref, 200)) || (await this.innerText(ref));
+    // Chromium and Firefox expose the DOM id and class attribute as object attributes.
+    const attrs = await this.q<Record<string, string>>(ref, ACC, "GetAttributes").catch(() => ({} as Record<string, string>));
+    const parts = [role || "element"];
+    if (text) parts.push(`“${text}”`);
+    if (attrs.id) parts.push("#" + attrs.id);
+    const classes = (attrs.class ?? "").split(/\s+/).filter(Boolean).slice(0, 4);
+    if (classes.length) parts.push(classes.map((c) => "." + c).join(""));
+    return parts.join(" ");
+  }
+
+  /** A web group or card has no name of its own: the start of the text inside it. */
+  private async innerText(root: Ref): Promise<string> {
+    let out = "", budget = 40;
+    const go = async (ref: Ref, depth: number) => {
+      if (out.length >= 80 || budget <= 0 || depth >= 4) return;
+      budget--;
+      if ((await this.role(ref)) === "password text") return;
+      const s = (await this.text(ref, 80)).replace(/\uFFFC/g, "").replace(/\s+/g, " ").trim();
+      if (s) out += (out ? " " : "") + s;
+      for (const c of await this.children(ref)) await go(c, depth + 1);
+    };
+    for (const c of await this.children(root)) await go(c, 0);
+    return out.slice(0, 80).trim();
   }
 
   async windowText(max: number): Promise<{ app: string; title: string; text: string } | null> {
