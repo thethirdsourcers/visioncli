@@ -14,11 +14,14 @@ extension AppDelegate {
         statusItem.menu = menu
         UsageTracker.shared.onChange = { [weak self] in self?.updateStatusTitle() }
         AgyUsage.shared.onChange = { [weak self] in self?.updateStatusTitle() }
-        if Settings.assistant != .claude { AgyUsage.shared.refresh(agy: cfg.agy) } // free: no model runs
         UsageTracker.shared.scanToday()
-        // Fresh limits on launch if what we have is old (a tiny Haiku request); replies keep them current after that.
-        if Settings.assistant == .claude, Date().timeIntervalSince(UsageTracker.shared.updated ?? .distantPast) > 3 * 3600 { UsageTracker.shared.refresh(claude: cfg.claude) }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.updateStatusTitle() } // resets roll over
+        refreshUsageIfStale()
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.updateStatusTitle() // resets roll over
+            // Keep the numbers current by themselves while someone is at the Mac (Claude: a tiny Haiku request at most
+            // every 15 minutes, skipped when replies already brought fresh ones; Gemini: agy's free /usage).
+            if CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!) < 600 { self?.refreshUsageIfStale() }
+        }
     }
 
     // The open menu is laid out around the status item: changing the item's title (usage rings) or a view inside the
@@ -110,7 +113,8 @@ extension AppDelegate {
     func usageItems(in menu: NSMenu, item: (String, Selector?, NSMenu, String, Bool, Any?) -> NSMenuItem) {
         let u = UsageTracker.shared
         let gemini = Settings.assistant != .claude
-        if gemini { if AgyUsage.shared.isStale { AgyUsage.shared.refresh(agy: cfg.agy) } } else { u.scanToday() }
+        refreshUsageIfStale()
+        if !gemini { u.scanToday() }
         let (who, session, week) = usageWindows()
         let s = u.percent(session), w = u.percent(week)
         let sub = NSMenu()
@@ -136,6 +140,14 @@ extension AppDelegate {
         i.image = (max(s ?? 0, w ?? 0) >= 80 ? UsageArt.symbol("exclamationmark.triangle.fill") : UsageArt.symbol("gauge.with.dots.needle.33percent", fallback: "gauge"))
         i.submenu = sub
         menu.addItem(i)
+    }
+
+    func refreshUsageIfStale() {
+        if Settings.assistant == .claude {
+            if UsageTracker.shared.isStale { UsageTracker.shared.refresh(claude: cfg.claude) }
+        } else if AgyUsage.shared.isStale {
+            AgyUsage.shared.refresh(agy: cfg.agy)
+        }
     }
 
     @objc func refreshUsage() {

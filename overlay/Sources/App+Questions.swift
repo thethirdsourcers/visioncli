@@ -133,7 +133,7 @@ extension AppDelegate {
                 if let region {
                     // A little margin around a picked element, so Claude sees what's next to it.
                     var shot = try Screen.capture(rect: picked == nil ? region : region.insetBy(dx: -12, dy: -12))
-                    if let picked { shot.label += ", the user pointed at: \(picked)"; log("picker: pointed at \(picked)") }
+                    if let picked { shot.label += ", the user pointed at: \(picked)" }
                     shots = [shot]
                 } else if let endWindow = Screen.windowUnderPointer() {
                     let end = try Screen.capture(window: endWindow)

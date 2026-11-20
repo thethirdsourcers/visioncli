@@ -212,7 +212,7 @@ enum ElementPicker {
         }
         var hit: AXUIElement?
         let err = AXUIElementCopyElementAtPosition(app, Float(p.x), Float(p.y), &hit)
-        guard err == .success, var el = hit else { log("picker: no element in \(win.app) (\(err.rawValue))"); return nil }
+        guard err == .success, var el = hit else { return nil }
         // Climb from bare text and tiny bits to the thing a person would point at (the link, button or card).
         for _ in 0..<6 {
             guard let r = rect(of: el) else { return nil }
@@ -296,7 +296,6 @@ final class SelectionView: NSView {
             guard let self, let window = self.window, self.start == nil else { return }
             let mine = r.map { window.convertFromScreen(Geometry.toAppKit($0.rect)) }
             self.hoveredAbout = r?.about
-            if (mine == nil) != (self.hovered == nil) { log("picker: hover \(mine.map { "\(Int($0.width))x\(Int($0.height))" } ?? "lost")") }
             self.hovered = mine
             self.needsDisplay = true
         }
@@ -307,7 +306,6 @@ final class SelectionView: NSView {
     override func mouseDragged(with e: NSEvent) { current = convert(e.locationInWindow, from: nil); needsDisplay = true }
     override func mouseUp(with e: NSEvent) {
         current = convert(e.locationInWindow, from: nil)
-        log("picker: mouse up, drag \(selection.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none"), hovered \(hovered.map { "\(Int($0.width))x\(Int($0.height))" } ?? "none")")
         guard let window else { onDone(nil); return }
         if let r = selection, r.width > 8, r.height > 8 { onPick(nil); onDone(window.convertToScreen(r)); return } // AppKit global
         // A click (no drag) picks the element under the pointer.

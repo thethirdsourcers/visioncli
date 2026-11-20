@@ -17,6 +17,7 @@ final class UsageTracker {
     private(set) var updated: Date?
     private(set) var today = Today()
     private var todayScanned: Date?
+    private var refreshing = false
     var onChange: () -> Void = {}
 
     private let defaults = UserDefaults.standard
@@ -48,6 +49,9 @@ final class UsageTracker {
         }
     }
 
+    /// Older than 15 minutes (every reply also brings fresh numbers, so this only matters between questions).
+    var isStale: Bool { Date().timeIntervalSince(updated ?? .distantPast) > 900 }
+
     /// A window's utilization, or 0 once its reset time has passed.
     func percent(_ w: Window?) -> Int? {
         guard let w else { return nil }
@@ -56,9 +60,13 @@ final class UsageTracker {
 
     /// Ask Claude Code for fresh numbers: the smallest possible Haiku request (it uses a sliver of the limit).
     func refresh(claude: String, done: @escaping () -> Void = {}) {
+        guard !refreshing else { return done() }
+        refreshing = true
         DispatchQueue.global(qos: .utility).async {
-            let (_, out, _) = shell(claude, ["-p", "--model", "haiku", "--output-format", "stream-json", "--verbose",
+            // Not saved as a session: no transcript in ~/.claude/projects (today's count, the backup, /resume stay clean).
+            let (_, out, _) = shell(claude, ["-p", "--model", "haiku", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
                                              "--max-turns", "1", "Reply with just: ok"], cwd: NSTemporaryDirectory())
+            DispatchQueue.main.async { self.refreshing = false }
             for line in out.split(separator: "\n") where line.contains("rate_limit_event") {
                 if let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                    let info = obj["rate_limit_info"] as? [String: Any] { self.record(info) }
