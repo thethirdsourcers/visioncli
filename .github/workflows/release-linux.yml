@@ -33,7 +33,7 @@ jobs:
     strategy:
       matrix:
         arch: ${{ fromJSON(inputs.arm64 && '["x64","arm64"]' || '["x64"]') }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }} # newer ubuntu-latest's rpmbuild fails on electron-builder's spec
     steps:
       - uses: actions/checkout@v4
         with:
@@ -116,7 +116,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: ${{ fromJSON(inputs.arm64 && '["x64","arm64"]' || '["x64"]') }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }} # newer ubuntu-latest's rpmbuild fails on electron-builder's spec
     env:
       SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     steps:
