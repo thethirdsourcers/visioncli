@@ -68,7 +68,8 @@ describe("UsageTracker", () => {
     assert.equal(u.barText(), "22% · 52%w");
     assert.equal(u.percent({ utilization: 0.9, resetsAt: Date.now() - 1 }), 0);
     assert.equal(u.isStale(), false);
-    assert.equal(u.isStale(Date.now() + 3 * 3600_000 + 1000), true);
+    assert.equal(u.isStale(Date.now() + 14 * 60_000), false);
+    assert.equal(u.isStale(Date.now() + 16 * 60_000), true);
     const reloaded = new UsageTracker(s, "/nonexistent");
     assert.equal(reloaded.percent(reloaded.week), 52);
     assert.equal(UsageTracker.tokens(1_234_567), "1.2M");
@@ -81,12 +82,13 @@ describe("UsageTracker", () => {
     const dir = tmp("vcli-usage-");
     const future = Math.floor(Date.now() / 1000) + 600;
     const event = { type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.1, resetsAt: future } } } };
-    const fake = fakeCli(dir, "claude", `require("fs").writeFileSync(${JSON.stringify(join(dir, "args"))}, process.argv.slice(2).join(" ") + "\\n");
+    const fake = fakeCli(dir, "claude", `require("fs").appendFileSync(${JSON.stringify(join(dir, "args"))}, process.argv.slice(2).join(" ") + "\\n");
 console.log(${JSON.stringify(JSON.stringify(event))});`);
     const u = new UsageTracker(store(), "/nonexistent");
-    await u.refresh(fake);
+    await Promise.all([u.refresh(fake), u.refresh(fake)]); // the second one, while the first runs, is dropped
     assert.equal(u.percent(u.session), 10);
-    assert.equal(readFileSync(join(dir, "args"), "utf8").trim(), "-p --model haiku --output-format stream-json --verbose --max-turns 1 Reply with just: ok");
+    assert.equal(readFileSync(join(dir, "args"), "utf8").trim(),
+      "-p --model haiku --output-format stream-json --verbose --no-session-persistence --max-turns 1 Reply with just: ok");
   });
 
   test("today's tokens: incremental reads, dedupe by message id, only today", () => {
@@ -192,4 +194,8 @@ test("Antigravity /usage: each group's 5-hour and weekly limits, and the group f
   assert.equal(u.active("gemini-3.8-flash")?.name, "Gemini Models");
   assert.equal(u.active("claude-opus-5-5")?.name, "Claude and GPT models");
   assert.equal(u.active(null)?.name, "Gemini Models");
+  assert.equal(u.isStale(), true);
+  u.updated = Date.now();
+  assert.equal(u.isStale(Date.now() + 9 * 60_000), false);
+  assert.equal(u.isStale(Date.now() + 11 * 60_000), true);
 });

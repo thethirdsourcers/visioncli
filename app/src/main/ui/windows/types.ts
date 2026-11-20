@@ -54,6 +54,7 @@ export type MenuId =
   | "showTerminal"           // terminal mode: Show <Assistant> Terminal
   | "showActivity"           // bubble mode: Show Live Activity in Terminal
   | "continueInTerminal"
+  | "menuOpened"             // the tray icon was clicked (StatusNotifier menus on Linux don't say when they open)
   | "quit";
 
 // ── Settings window (SettingsWindow.swift, App+Settings.swift) ──────────────────────────────────────────────────

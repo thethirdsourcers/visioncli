@@ -15,8 +15,9 @@ export interface Today { requests: number; input: number; output: number; cached
  *  (in, out, cached) of its first occurrence. */
 interface FileScan { offset: number; ids: string[]; counts: Map<string, [number, number, number]> }
 
-/** Fresh limits on launch only if what we have is older than this. */
-export const STALE_MS = 3 * 3600 * 1000;
+/** Fresh limits only if what we have is older than this (every reply also brings fresh numbers, so this only matters
+ *  between questions). */
+export const STALE_MS = 15 * 60_000;
 
 interface Store { getStore<T>(k: string): T | undefined; setStore(k: string, v: unknown): void }
 
@@ -27,6 +28,7 @@ export class UsageTracker {
   today: Today = { requests: 0, input: 0, output: 0, cached: 0 };
   onChange: () => void = () => {};
   private todayScanned = 0;
+  private refreshing = false;
   private scans = new Map<string, FileScan>();
   private scansDay = 0;
 
@@ -73,9 +75,16 @@ export class UsageTracker {
 
   /** Asks Claude Code for fresh numbers: the smallest possible Haiku request (it uses a sliver of the limit). */
   async refresh(claude: string, env?: NodeJS.ProcessEnv) {
-    const { out } = await run(claude, ["-p", "--model", "haiku", "--output-format", "stream-json", "--verbose",
-      "--max-turns", "1", "Reply with just: ok"], { cwd: tmpdir(), env, timeout: 120_000 });
-    for (const line of out.split("\n")) this.recordLine(line);
+    if (this.refreshing) return;
+    this.refreshing = true;
+    try {
+      // Not saved as a session: no transcript in ~/.claude/projects (today's count, the backup, /resume stay clean).
+      const { out } = await run(claude, ["-p", "--model", "haiku", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+        "--max-turns", "1", "Reply with just: ok"], { cwd: tmpdir(), env, timeout: 120_000 });
+      for (const line of out.split("\n")) this.recordLine(line);
+    } finally {
+      this.refreshing = false;
+    }
   }
 
   /** Re-counts today's tokens (at most once a minute). */

@@ -30,6 +30,8 @@ export class TrayMenu {
   constructor(private model: () => MenuModel, private click: (id: MenuId | LocalId, arg?: string | null) => void) {
     this.tray = new Tray(this.icon("tray:none"));
     this.tray.setToolTip("VisionCLI");
+    this.tray.on("click", () => this.click("menuOpened"));
+    this.tray.on("right-click", () => this.click("menuOpened"));
     this.refresh();
     this.timer = setInterval(() => this.refresh(), 15_000);
     nativeTheme.on("updated", () => { this.icons.clear(); this.refresh(true); });

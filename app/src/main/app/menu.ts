@@ -14,6 +14,7 @@ import { App } from "./core";
 declare module "./core" {
   interface App {
     menuModel(): MenuModel;
+    refreshUsageIfStale(): void;
     onMenu(id: MenuId, arg?: string | null): void;
     refreshCandidates(): Promise<void>;
     pickProject(path: string): void;
@@ -35,8 +36,6 @@ const usageWindow = (u: UsageTracker, w: { utilization: number; resetsAt: number
 App.prototype.menuModel = function (this: App): MenuModel {
   const u = this.usage;
   const gemini = settings.get("assistant") !== "claude";
-  // Gemini: Antigravity's own limits, re-read when the menu is rebuilt and they're older than 10 minutes.
-  if (gemini && this.cfg.agy && this.agyUsage.isStale()) void this.agyUsage.refresh(this.cfg.agy, { ...process.env, PATH: this.cfg.path });
   const active = gemini ? this.agyUsage.active(settings.get("agyModel")) : null;
   const groups = gemini ? [active, ...this.agyUsage.groups.filter((g) => g !== active)].filter((g): g is NonNullable<typeof g> => !!g) : [];
   const recent = [this.currentProject];
@@ -69,11 +68,20 @@ App.prototype.menuModel = function (this: App): MenuModel {
   };
 };
 
+/** The assistant in use's plan limits, if old: Claude older than 15 minutes (a tiny Haiku request), Gemini older than
+ *  10 (agy's free /usage). Not from menuModel: the tray rebuilds it every 15 s, even while nobody is at the computer. */
+App.prototype.refreshUsageIfStale = function (this: App) {
+  const env = { ...process.env, PATH: this.cfg.path };
+  if (settings.get("assistant") === "claude") { if (this.usage.isStale()) void this.usage.refresh(this.cfg.claude, env); }
+  else if (this.cfg.agy && this.agyUsage.isStale()) void this.agyUsage.refresh(this.cfg.agy, env);
+};
+
 App.prototype.onMenu = function (this: App, id: MenuId, arg?: string | null) {
   log(`menu: ${id}${arg ? " " + arg : ""}`);
   switch (id) {
     case "pickProject": if (arg) this.pickProject(arg); break;
     case "chooseFolder": void this.chooseProjectFolder(); break;
+    case "menuOpened": this.refreshUsageIfStale(); break;
     case "refreshUsage":
       if (settings.get("assistant") !== "claude") { if (this.cfg.agy) void this.agyUsage.refresh(this.cfg.agy, { ...process.env, PATH: this.cfg.path }); }
       else void this.usage.refresh(this.cfg.claude, { ...process.env, PATH: this.cfg.path });

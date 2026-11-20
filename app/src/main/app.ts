@@ -1,4 +1,4 @@
-import { BrowserWindow, app as electron, dialog, globalShortcut, screen, shell } from "electron";
+import { BrowserWindow, app as electron, dialog, globalShortcut, powerMonitor, screen, shell } from "electron";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -270,11 +270,14 @@ export async function launch(o: { argv: string[]; crash: CrashReporter; recovere
   a.usage.onChange = () => a.windows.refreshMenu();
   a.agyUsage.onChange = () => a.windows.refreshMenu();
   a.usage.scanToday();
-  // Fresh limits on launch if what we have is old (a tiny Haiku request); replies keep them current after that.
-  // Each plan's limits for the assistant in use (Claude's refresh spends a tiny Haiku request; agy's is free).
-  if (settings.get("assistant") === "claude") { if (a.usage.isStale()) void a.usage.refresh(cfg.claude, { ...process.env, PATH: cfg.path }); }
-  else if (cfg.agy) void a.agyUsage.refresh(cfg.agy, { ...process.env, PATH: cfg.path });
-  setInterval(() => { a.usage.scanToday(); a.windows.refreshMenu(); a.unloadIdleVoice(); }, 60_000).unref(); // resets roll over; idle models
+  a.refreshUsageIfStale();
+  setInterval(() => {
+    a.usage.scanToday();
+    a.windows.refreshMenu(); // resets roll over
+    a.unloadIdleVoice();
+    // Keep the limits current by themselves while someone is at the computer (Wayland reports 0 idle: always refresh).
+    if (powerMonitor.getSystemIdleTime() < 600) a.refreshUsageIfStale();
+  }, 60_000).unref();
   settings.on("change", (k: string) => {
     if (k === "assistant") a.state.assistantName = settings.get("assistant") === "claude" ? "Claude" : "Gemini";
     a.windows.refreshMenu();
