@@ -1,0 +1,21 @@
+Package: visioncli-linux
+Architecture: amd64
+Version: 0.12.0
+Priority: optional
+Section: default
+Maintainer: Third Sourcers <visioncli@thethirdsourcers.com>
+Installed-Size: 289508
+Depends: libgtk-3-0 | libgtk-3-0t64, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0 | libatspi2.0-0t64, libuuid1, libgbm1, libasound2 | libasound2t64, libsecret-1-0, at-spi2-core, tmux, pipewire-bin | pulseaudio-utils
+Recommends: xdotool, xinput, wmctrl, x11-utils, maim | imagemagick, xclip, grim, slurp, wl-clipboard, python3-gi, gir1.2-atspi-2.0, espeak-ng
+Filename: pool/main/VisionCLI-0.12.0-linux-amd64.deb
+Size: 79603712
+MD5sum: 2ffd1d70a4ce28f0bddb71c2dce9544e
+SHA1: dd930f05647446f575c62bb011c06f78aab073e1
+SHA256: 48e5f295db4226462fcb86eae2eda0177503e6c86ba663d278550b33ea75ad83
+SHA512: efbd15bedd02737ff8aa80652faedb9ffae61ae37759b14cee19994f26ee6c44c90789d54f0ba3c577e95c403bbacc2474ffa01980941fb46f16b9bcb338645e
+Homepage: https://github.com/thethirdsourcers/visioncli
+Description: Voice and screen co-assistant for developers
+  AI co-assistant for developers that sees your screen and uses your computer: ask about what you’re looking at or have it do the task, by typing or voice, with Claude Code or Gemini.
+License: MIT
+Vendor: Third Sourcers
+

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- VisionCLI mark: a camera aperture (six separated segments) around a pupil. -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9DBBFF"/><stop offset="1" stop-color="#4C5FE0"/></linearGradient></defs>
+  <circle cx="60" cy="60" r="40" fill="none" stroke="url(#g)" stroke-width="15" stroke-linecap="round" stroke-dasharray="22.5 19.4" transform="rotate(-70 60 60)"/>
+  <circle cx="60" cy="60" r="14" fill="url(#g)"/>
+</svg>
