@@ -48,7 +48,9 @@ export class TrayMenu {
     this.last = key;
     this.tray.setImage(this.icon(rings ? `tray:${rings.session}:${rings.week}` : "tray:none", rings));
     this.tray.setToolTip(tooltip(m));
-    this.tray.setContextMenu(Menu.buildFromTemplate(items.map((i) => this.toElectron(i))));
+    const menu = Menu.buildFromTemplate(items.map((i) => this.toElectron(i)));
+    menu.on("menu-will-show", () => this.click("menuOpened"));
+    this.tray.setContextMenu(menu);
   }
 
   destroy() {

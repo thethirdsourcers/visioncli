@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.0
+
+- **Point at a part of the screen** (⌥⇧Space on macOS, Alt+Shift+Space on Linux and Windows): a box now snaps to the button, card, paragraph or section under the mouse, including inside web pages.
+  - Hold the shortcut, aim with the mouse and let go to send that box. You can also click a box, drag an area, or tap the shortcut again for the whole window.
+  - Claude gets the element's name and text and, on web pages, its id and classes, so it can find it in your code. Only the box (plus a small margin) is sent, which costs fewer tokens.
+- **Plan usage refreshes by itself:** Claude and Gemini usage in the menu stay current while you're at the computer, without pressing Refresh Usage. Usage checks no longer leave sessions behind in Claude Code's history.
+- **Claude backup** (Settings → Advanced): daily, encrypted, incremental backups of `~/.claude` to any folder, such as Google Drive. Restic does the work; you can restore any day's snapshot, and live progress is shown.
+- **Error watcher:** when a command fails in a terminal tab (iTerm on macOS; tmux, kitty or WezTerm on Linux and Windows), a badge appears. Press ⌥E (Alt+E) to have the assistant explain and fix it.
+- **Recommended Claude Code add-ons** in setup and Settings → Integrations: Ponytail, Graphify, Claude-Mem, Context7 and Security Guidance.
+- **Customizable shortcuts** (Settings → General → Shortcuts): pick the hold-to-talk key and record new key combinations.
+- **Settings → Usage:** memory and CPU of every VisionCLI process, and the disk its models use.
+- **Chatterbox Turbo** (macOS, Apple Silicon): an optional, more natural voice in Settings → Voice.
+- **Terminal mode:** answers keep coming when the question went to a background agent you were viewing (before, the bubble stayed on "Sending to terminal").
+- **Smaller things:** the bubble shows the new VisionCLI mark. The listening pill says "with screenshot" and no longer names the speech engine. The Gemini CLI row only shows when Gemini CLI is installed. Voice models unload after 10 idle minutes, and the error watcher checks less often when no terminal is in front.
+- **Browser tools:** work on more sites: single-page apps, web components, rich-text editors, Gmail, drag and drop, uploads and dialogs.
+
 ## 0.11.1
 
 Linux and Windows only (macOS stays on 0.11.0).
